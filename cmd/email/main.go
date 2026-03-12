@@ -37,6 +37,10 @@ func (l fileLoader) Load() (config.Config, error) {
 	return config.LoadFile(l.path)
 }
 
+func DefaultConfigPath() string {
+	return config.DefaultPath()
+}
+
 func newFlagSet() (*flag.FlagSet, *cliOptions) {
 	flagSet := flag.NewFlagSet("email", flag.ContinueOnError)
 	flagSet.SetOutput(os.Stderr)
@@ -48,6 +52,24 @@ func newFlagSet() (*flag.FlagSet, *cliOptions) {
 	flagSet.IntVar(&options.Limit, "limit", 0, "max messages to fetch")
 	flagSet.StringVar(&options.Format, "format", "", "output format")
 	flagSet.UintVar(&options.UID, "uid", 0, "message UID for detail view")
+	flagSet.Usage = func() {
+		output := flagSet.Output()
+		fmt.Fprintf(output, "Fetch email from IMAP accounts.\n\n")
+		fmt.Fprintf(output, "Usage:\n  email [flags]\n\n")
+		fmt.Fprintf(output, "Behavior:\n")
+		fmt.Fprintf(output, "  - Without --uid, lists recent messages from the target account\n")
+		fmt.Fprintf(output, "  - With --uid, shows one full message and body\n")
+		fmt.Fprintf(output, "  - Without -A/--account, uses default_account from config\n\n")
+		fmt.Fprintf(output, "Examples:\n")
+		fmt.Fprintf(output, "  email\n")
+		fmt.Fprintf(output, "  email -A personal\n")
+		fmt.Fprintf(output, "  email -A personal --uid 12345\n")
+		fmt.Fprintf(output, "  email -A work --format json\n\n")
+		fmt.Fprintf(output, "Config:\n")
+		fmt.Fprintf(output, "  default path: %s\n\n", DefaultConfigPath())
+		fmt.Fprintf(output, "Flags:\n")
+		flagSet.PrintDefaults()
+	}
 
 	return flagSet, options
 }
