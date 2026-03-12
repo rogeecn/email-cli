@@ -4,6 +4,7 @@ type Options struct {
 	Account string
 	Mailbox string
 	Limit   int
+	Offset  int
 	Format  string
 	UID     uint32
 }
@@ -17,6 +18,7 @@ type AccountDefaults struct {
 type Request struct {
 	Mailbox   string
 	Limit     int
+	Offset    int
 	Format    string
 	DetailUID uint32
 }
@@ -47,9 +49,15 @@ func BuildRequest(options Options, defaults AccountDefaults) Request {
 		format = options.Format
 	}
 
+	offset := 0
+	if options.Offset > 0 {
+		offset = options.Offset
+	}
+
 	return Request{
 		Mailbox:   mailbox,
 		Limit:     limit,
+		Offset:    offset,
 		Format:    format,
 		DetailUID: options.UID,
 	}

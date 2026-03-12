@@ -13,7 +13,7 @@ import (
 )
 
 func TestParseFlagsReadsAliasUIDConfigPathAndDebug(t *testing.T) {
-	options, err := parseFlags([]string{"-A", "personal", "--uid", "42", "--mailbox", "Archive", "--limit", "10", "--format", "json", "-c", "./custom.toml", "--debug"})
+	options, err := parseFlags([]string{"-A", "personal", "--uid", "42", "--mailbox", "Archive", "--limit", "10", "--offset", "5", "--format", "json", "-c", "./custom.toml", "--debug"})
 	if err != nil {
 		t.Fatalf("parseFlags returned error: %v", err)
 	}
@@ -29,6 +29,9 @@ func TestParseFlagsReadsAliasUIDConfigPathAndDebug(t *testing.T) {
 	}
 	if options.Limit != 10 {
 		t.Fatalf("Limit = %d, want 10", options.Limit)
+	}
+	if options.Offset != 5 {
+		t.Fatalf("Offset = %d, want 5", options.Offset)
 	}
 	if options.Format != "json" {
 		t.Fatalf("Format = %q, want %q", options.Format, "json")

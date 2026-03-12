@@ -21,6 +21,7 @@ type cliOptions struct {
 	Debug      bool
 	Mailbox    string
 	Limit      int
+	Offset     int
 	Format     string
 	UID        uint
 }
@@ -55,6 +56,7 @@ func newFlagSet() (*flag.FlagSet, *cliOptions) {
 	flagSet.BoolVar(&options.Debug, "debug", false, "print receive debug logs to stderr")
 	flagSet.StringVar(&options.Mailbox, "mailbox", "", "mailbox name")
 	flagSet.IntVar(&options.Limit, "limit", 0, "max messages to fetch")
+	flagSet.IntVar(&options.Offset, "offset", 0, "messages to skip before listing")
 	flagSet.StringVar(&options.Format, "format", "", "output format")
 	flagSet.UintVar(&options.UID, "uid", 0, "message UID for detail view")
 	flagSet.Usage = func() {
@@ -70,6 +72,7 @@ func newFlagSet() (*flag.FlagSet, *cliOptions) {
 		fmt.Fprintf(output, "  email -A personal\n")
 		fmt.Fprintf(output, "  email -c ./config.toml -A personal\n")
 		fmt.Fprintf(output, "  email -A personal --uid 12345\n")
+		fmt.Fprintf(output, "  email -A personal --offset 10 --limit 10\n")
 		fmt.Fprintf(output, "  email -A personal --debug\n")
 		fmt.Fprintf(output, "  email -A work --format json\n\n")
 		fmt.Fprintf(output, "Config:\n")
@@ -102,6 +105,7 @@ func execute(ctx context.Context, appRunner runner, args []string, stdout io.Wri
 		Account: cliOptions.Account,
 		Mailbox: cliOptions.Mailbox,
 		Limit:   cliOptions.Limit,
+		Offset:  cliOptions.Offset,
 		Format:  cliOptions.Format,
 		UID:     uint32(cliOptions.UID),
 	})
@@ -114,7 +118,7 @@ func execute(ctx context.Context, appRunner runner, args []string, stdout io.Wri
 	if result.Mode == app.ModeDetail {
 		rendered, err = output.RenderDetail(result.Detail, result.Format)
 	} else {
-		rendered, err = output.RenderSummaries(result.Summaries, result.Format)
+		rendered, err = output.RenderSummaries(result.Summaries, result.Format, result.ListMetadata)
 	}
 	if err != nil {
 		fmt.Fprintln(stderr, err)

@@ -1,12 +1,13 @@
 package mail
 
 type Summary struct {
-	UID     uint32   `json:"uid" yaml:"uid"`
-	Date    string   `json:"date" yaml:"date"`
-	From    string   `json:"from" yaml:"from"`
-	To      []string `json:"to" yaml:"to"`
-	Subject string   `json:"subject" yaml:"subject"`
-	Seen    bool     `json:"seen" yaml:"seen"`
+	UID             uint32   `json:"uid" yaml:"uid"`
+	Date            string   `json:"date" yaml:"date"`
+	From            string   `json:"from" yaml:"from"`
+	To              []string `json:"to" yaml:"to"`
+	Subject         string   `json:"subject" yaml:"subject"`
+	Seen            bool     `json:"seen" yaml:"seen"`
+	AttachmentCount int      `json:"attachment_count,omitempty" yaml:"attachment_count,omitempty"`
 }
 
 type Attachment struct {

@@ -5,6 +5,7 @@ import (
 
 	"github.com/rogeecn/email-cli/internal/config"
 	"github.com/rogeecn/email-cli/internal/mail"
+	"github.com/rogeecn/email-cli/internal/output"
 	"github.com/rogeecn/email-cli/internal/provider"
 )
 
@@ -17,8 +18,13 @@ type Loader interface {
 	Load() (config.Config, error)
 }
 
+type ListResult struct {
+	Summaries []mail.Summary
+	Total     int
+}
+
 type MailService interface {
-	ListRecent(ctx context.Context, account config.AccountConfig, mailbox string, limit int) ([]mail.Summary, error)
+	ListRecent(ctx context.Context, account config.AccountConfig, mailbox string, limit int, offset int) (ListResult, error)
 	GetByUID(ctx context.Context, account config.AccountConfig, mailbox string, uid uint32) (mail.Detail, error)
 }
 
@@ -28,11 +34,12 @@ type Application struct {
 }
 
 type Result struct {
-	Mode      string
-	Format    string
-	Account   string
-	Summaries []mail.Summary
-	Detail    mail.Detail
+	Mode         string
+	Format       string
+	Account      string
+	ListMetadata output.ListMetadata
+	Summaries    []mail.Summary
+	Detail       mail.Detail
 }
 
 func New(loader Loader, mailService MailService) Application {
@@ -72,11 +79,16 @@ func (a Application) Run(ctx context.Context, options Options) (Result, error) {
 		return result, nil
 	}
 
-	summaries, err := a.mailService.ListRecent(ctx, account, request.Mailbox, request.Limit)
+	listResult, err := a.mailService.ListRecent(ctx, account, request.Mailbox, request.Limit, request.Offset)
 	if err != nil {
 		return Result{}, err
 	}
 	result.Mode = ModeList
-	result.Summaries = summaries
+	result.ListMetadata = output.ListMetadata{
+		Total:  listResult.Total,
+		Limit:  request.Limit,
+		Offset: request.Offset,
+	}
+	result.Summaries = listResult.Summaries
 	return result, nil
 }

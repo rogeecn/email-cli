@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/rogeecn/email-cli/internal/app"
 	"github.com/rogeecn/email-cli/internal/config"
 	"github.com/rogeecn/email-cli/internal/mail"
 )
@@ -12,19 +13,21 @@ import (
 type fakeClient struct {
 	listMailbox  string
 	listLimit    int
+	listOffset   int
 	getMailbox   string
 	getUID       uint32
-	listResult   []mail.Summary
+	listResult   app.ListResult
 	detailResult mail.Detail
 	listErr      error
 	getErr       error
 }
 
-func (f *fakeClient) ListRecent(_ context.Context, mailbox string, limit int) ([]mail.Summary, error) {
+func (f *fakeClient) ListRecent(_ context.Context, mailbox string, limit int, offset int) (app.ListResult, error) {
 	f.listMailbox = mailbox
 	f.listLimit = limit
+	f.listOffset = offset
 	if f.listErr != nil {
-		return nil, f.listErr
+		return app.ListResult{}, f.listErr
 	}
 	return f.listResult, nil
 }
@@ -40,20 +43,20 @@ func (f *fakeClient) GetByUID(_ context.Context, mailbox string, uid uint32) (ma
 
 func TestServiceDelegatesListAndDetailCalls(t *testing.T) {
 	client := &fakeClient{
-		listResult:   []mail.Summary{{UID: 1, Subject: "hello"}},
+		listResult:   app.ListResult{Summaries: []mail.Summary{{UID: 1, Subject: "hello"}}, Total: 1},
 		detailResult: mail.Detail{Summary: mail.Summary{UID: 1, Subject: "hello"}},
 	}
 	service := NewService(client)
 
-	summaries, err := service.ListRecent(context.Background(), config.AccountConfig{}, "INBOX", 20)
+	listResult, err := service.ListRecent(context.Background(), config.AccountConfig{}, "INBOX", 20, 5)
 	if err != nil {
 		t.Fatalf("ListRecent returned error: %v", err)
 	}
-	if client.listMailbox != "INBOX" || client.listLimit != 20 {
-		t.Fatalf("ListRecent delegated wrong arguments: mailbox=%q limit=%d", client.listMailbox, client.listLimit)
+	if client.listMailbox != "INBOX" || client.listLimit != 20 || client.listOffset != 5 {
+		t.Fatalf("ListRecent delegated wrong arguments: mailbox=%q limit=%d offset=%d", client.listMailbox, client.listLimit, client.listOffset)
 	}
-	if len(summaries) != 1 || summaries[0].UID != 1 {
-		t.Fatalf("unexpected list result: %+v", summaries)
+	if len(listResult.Summaries) != 1 || listResult.Summaries[0].UID != 1 || listResult.Total != 1 {
+		t.Fatalf("unexpected list result: %+v", listResult)
 	}
 
 	detail, err := service.GetByUID(context.Background(), config.AccountConfig{}, "INBOX", 1)
@@ -72,7 +75,7 @@ func TestServicePropagatesClientErrors(t *testing.T) {
 	expectedErr := errors.New("imap unavailable")
 	service := NewService(&fakeClient{listErr: expectedErr, getErr: expectedErr})
 
-	_, err := service.ListRecent(context.Background(), config.AccountConfig{}, "INBOX", 20)
+	_, err := service.ListRecent(context.Background(), config.AccountConfig{}, "INBOX", 20, 0)
 	if !errors.Is(err, expectedErr) {
 		t.Fatalf("ListRecent error = %v, want %v", err, expectedErr)
 	}

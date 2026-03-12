@@ -7,12 +7,13 @@ import (
 
 func TestSummaryAndDetailModelsExposeExpectedFields(t *testing.T) {
 	summary := Summary{
-		UID:     123,
-		Date:    "2026-03-12T10:00:00Z",
-		From:    "Alice <alice@example.com>",
-		To:      []string{"Bob <bob@example.com>"},
-		Subject: "Hello",
-		Seen:    true,
+		UID:             123,
+		Date:            "2026-03-12T10:00:00Z",
+		From:            "Alice <alice@example.com>",
+		To:              []string{"Bob <bob@example.com>"},
+		Subject:         "Hello",
+		Seen:            true,
+		AttachmentCount: 1,
 	}
 
 	if summary.UID != 123 {
@@ -26,6 +27,9 @@ func TestSummaryAndDetailModelsExposeExpectedFields(t *testing.T) {
 	}
 	if !summary.Seen {
 		t.Fatalf("Seen = false, want true")
+	}
+	if summary.AttachmentCount != 1 {
+		t.Fatalf("AttachmentCount = %d, want 1", summary.AttachmentCount)
 	}
 
 	detail := Detail{
@@ -110,6 +114,9 @@ func TestParseMessageBuildsDetailFromRawRFC822(t *testing.T) {
 	}
 	if len(detail.Attachments) != 1 || detail.Attachments[0].Name != "report.pdf" {
 		t.Fatalf("unexpected attachments: %+v", detail.Attachments)
+	}
+	if detail.AttachmentCount != 1 {
+		t.Fatalf("AttachmentCount = %d, want 1", detail.AttachmentCount)
 	}
 	if detail.Headers["Message-ID"] != "<123@example.com>" {
 		t.Fatalf("Message-ID = %q", detail.Headers["Message-ID"])

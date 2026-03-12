@@ -100,8 +100,27 @@ func (f *fakeSessionClient) UIDSearch() searchCommand {
 	return fakeSearchCommand{data: &imapv2.SearchData{All: imapv2.UIDSetNum(f.searchResult...)}, err: f.searchErr}
 }
 
-func (f *fakeSessionClient) Fetch(_ []uint32, _ bool) fetchCommand {
-	return &fakeFetchCommand{messages: f.fetchMessages, err: f.fetchErr}
+func (f *fakeSessionClient) Fetch(uids []uint32, _ bool) fetchCommand {
+	allowed := make(map[uint32]struct{}, len(uids))
+	for _, uid := range uids {
+		allowed[uid] = struct{}{}
+	}
+
+	messages := make([]*fakeFetchMessage, 0, len(f.fetchMessages))
+	for _, message := range f.fetchMessages {
+		message.index = 0
+		for _, item := range message.items {
+			typed, ok := item.(fakeFetchUID)
+			if !ok {
+				continue
+			}
+			if _, exists := allowed[typed.uid]; exists {
+				messages = append(messages, message)
+			}
+			break
+		}
+	}
+	return &fakeFetchCommand{messages: messages, err: f.fetchErr}
 }
 
 func (f *fakeSessionClient) Close() error  { return nil }
@@ -110,20 +129,22 @@ func (f *fakeSessionClient) Logout() error { return nil }
 func TestRuntimeClientListsRecentMessages(t *testing.T) {
 	raw1 := "From: Alice <alice@example.com>\r\nTo: Bob <bob@example.com>\r\nSubject: First\r\nDate: Thu, 12 Mar 2026 10:00:00 +0000\r\n\r\nOne"
 	raw2 := "From: Carol <carol@example.com>\r\nTo: Dan <dan@example.com>\r\nSubject: Second\r\nDate: Thu, 12 Mar 2026 11:00:00 +0000\r\n\r\nTwo"
+	raw3 := "From: Eve <eve@example.com>\r\nTo: Frank <frank@example.com>\r\nSubject: Third\r\nDate: Thu, 12 Mar 2026 12:00:00 +0000\r\n\r\nThree"
 	session := &fakeSessionClient{
-		searchResult: []imapv2.UID{10, 20},
+		searchResult: []imapv2.UID{10, 20, 30},
 		fetchMessages: []*fakeFetchMessage{
 			{items: []fetchItem{fakeFetchUID{uid: 10}, fakeFetchFlags{flags: []string{"\\Seen"}}, fakeFetchBodySection{literal: strings.NewReader(raw1)}}},
 			{items: []fetchItem{fakeFetchUID{uid: 20}, fakeFetchFlags{flags: []string{}}, fakeFetchBodySection{literal: strings.NewReader(raw2)}}},
+			{items: []fetchItem{fakeFetchUID{uid: 30}, fakeFetchFlags{flags: []string{}}, fakeFetchBodySection{literal: strings.NewReader(raw3)}}},
 		},
 	}
 	client := NewRuntimeClient(func(account config.AccountConfig) (sessionClient, error) {
 		return session, nil
 	})
 
-	summaries, err := client.ListRecent(context.Background(), config.AccountConfig{
+	listResult, err := client.ListRecent(context.Background(), config.AccountConfig{
 		Auth: config.AuthConfig{Username: "user@example.com", Password: "secret"},
-	}, "INBOX", 2)
+	}, "INBOX", 2, 1)
 	if err != nil {
 		t.Fatalf("ListRecent returned error: %v", err)
 	}
@@ -136,14 +157,17 @@ func TestRuntimeClientListsRecentMessages(t *testing.T) {
 	if !session.searched {
 		t.Fatalf("expected UIDSearch to be called")
 	}
-	if len(summaries) != 2 {
-		t.Fatalf("len(summaries) = %d, want 2", len(summaries))
+	if len(listResult.Summaries) != 2 {
+		t.Fatalf("len(summaries) = %d, want 2", len(listResult.Summaries))
 	}
-	if summaries[0].UID != 20 || summaries[0].Subject != "Second" {
-		t.Fatalf("latest summary = %+v", summaries[0])
+	if listResult.Total != 3 {
+		t.Fatalf("total = %d, want 3", listResult.Total)
 	}
-	if summaries[1].UID != 10 || !summaries[1].Seen {
-		t.Fatalf("older summary = %+v", summaries[1])
+	if listResult.Summaries[0].UID != 20 || listResult.Summaries[0].Subject != "Second" {
+		t.Fatalf("latest summary = %+v", listResult.Summaries[0])
+	}
+	if listResult.Summaries[1].UID != 10 || !listResult.Summaries[1].Seen {
+		t.Fatalf("older summary = %+v", listResult.Summaries[1])
 	}
 }
 
@@ -207,19 +231,22 @@ func TestRuntimeClientListRecentSkipsUnknownCharsetMessages(t *testing.T) {
 		return session, nil
 	}).WithDebugOutput(&logs)
 
-	summaries, err := client.ListRecent(context.Background(), config.AccountConfig{
+	listResult, err := client.ListRecent(context.Background(), config.AccountConfig{
 		Provider: "qq",
 		Auth:     config.AuthConfig{Username: "user@example.com", Password: "secret"},
 		IMAP:     config.IMAPConfig{Host: "imap.qq.com", Port: 993, TLS: true},
-	}, "INBOX", 20)
+	}, "INBOX", 20, 0)
 	if err != nil {
 		t.Fatalf("ListRecent returned error: %v", err)
 	}
-	if len(summaries) != 1 {
-		t.Fatalf("len(summaries) = %d, want 1", len(summaries))
+	if len(listResult.Summaries) != 1 {
+		t.Fatalf("len(summaries) = %d, want 1", len(listResult.Summaries))
 	}
-	if summaries[0].Subject != "Second" {
-		t.Fatalf("Subject = %q, want %q", summaries[0].Subject, "Second")
+	if listResult.Total != 2 {
+		t.Fatalf("total = %d, want 2", listResult.Total)
+	}
+	if listResult.Summaries[0].Subject != "Second" {
+		t.Fatalf("Subject = %q, want %q", listResult.Summaries[0].Subject, "Second")
 	}
 	if !strings.Contains(logs.String(), "parse message skipped") {
 		t.Fatalf("debug logs should mention skipped parse error, got %q", logs.String())
@@ -232,7 +259,7 @@ func TestRuntimeClientPropagatesDialErrors(t *testing.T) {
 		return nil, expectedErr
 	})
 
-	_, err := client.ListRecent(context.Background(), config.AccountConfig{}, "INBOX", 1)
+	_, err := client.ListRecent(context.Background(), config.AccountConfig{}, "INBOX", 1, 0)
 	if !errors.Is(err, expectedErr) {
 		t.Fatalf("ListRecent error = %v, want %v", err, expectedErr)
 	}
@@ -256,7 +283,7 @@ func TestRuntimeClientWritesDebugLogs(t *testing.T) {
 		Provider: "qq",
 		Auth:     config.AuthConfig{Username: "user@example.com", Password: "secret"},
 		IMAP:     config.IMAPConfig{Host: "imap.qq.com", Port: 993, TLS: true},
-	}, "INBOX", 1)
+	}, "INBOX", 1, 0)
 	if err != nil {
 		t.Fatalf("ListRecent returned error: %v", err)
 	}

@@ -12,12 +12,13 @@ import (
 func sampleSummary() []mail.Summary {
 	return []mail.Summary{
 		{
-			UID:     123,
-			Date:    "2026-03-12T10:00:00Z",
-			From:    "Alice <alice@example.com>",
-			To:      []string{"Bob <bob@example.com>"},
-			Subject: "Hello",
-			Seen:    true,
+			UID:             123,
+			Date:            "2026-03-12T10:00:00Z",
+			From:            "Alice <alice@example.com>",
+			To:              []string{"Bob <bob@example.com>"},
+			Subject:         "Hello",
+			Seen:            true,
+			AttachmentCount: 1,
 		},
 	}
 }
@@ -44,17 +45,35 @@ func sampleDetail() mail.Detail {
 }
 
 func TestRenderSummaryPlain(t *testing.T) {
-	out, err := RenderSummaries(sampleSummary(), "plain")
+	out, err := RenderSummaries(sampleSummary(), "plain", ListMetadata{Total: 1, Limit: 10, Offset: 0})
 	if err != nil {
 		t.Fatalf("RenderSummaries returned error: %v", err)
 	}
 
 	text := string(out)
-	if !strings.Contains(text, "UID") {
-		t.Fatalf("plain output should include header row")
+	if !strings.Contains(text, "Showing 1 emails (total 1, limit 10, offset 0)") {
+		t.Fatalf("plain output should include pagination header")
 	}
-	if !strings.Contains(text, "Hello") {
-		t.Fatalf("plain output should include subject")
+	if !strings.Contains(text, "Hello\n") {
+		t.Fatalf("plain output should include subject as headline")
+	}
+	if !strings.Contains(text, "  id: 123") {
+		t.Fatalf("plain output should include message id")
+	}
+	if !strings.Contains(text, "  from: Alice <alice@example.com>") {
+		t.Fatalf("plain output should include sender")
+	}
+	if !strings.Contains(text, "  to: Bob <bob@example.com>") {
+		t.Fatalf("plain output should include recipients")
+	}
+	if !strings.Contains(text, "  received: 2026-03-12T10:00:00Z") {
+		t.Fatalf("plain output should include receive time")
+	}
+	if !strings.Contains(text, "  attachments: yes (1)") {
+		t.Fatalf("plain output should include attachment summary")
+	}
+	if strings.Contains(text, "UID\tDATE") {
+		t.Fatalf("plain output should no longer render table headers")
 	}
 }
 

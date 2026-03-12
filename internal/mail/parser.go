@@ -105,6 +105,7 @@ func parseMultipartInto(detail *Detail, reader *mailmessage.Reader) error {
 				ContentType: contentType,
 				Size:        int64(len(data)),
 			})
+			detail.AttachmentCount = len(detail.Attachments)
 		}
 	}
 }

@@ -12,6 +12,7 @@ import (
 
 	imapv2 "github.com/emersion/go-imap/v2"
 	"github.com/emersion/go-imap/v2/imapclient"
+	"github.com/rogeecn/email-cli/internal/app"
 	"github.com/rogeecn/email-cli/internal/config"
 	"github.com/rogeecn/email-cli/internal/mail"
 )
@@ -96,13 +97,13 @@ func NewDefaultRuntimeClient() RuntimeClient {
 	})
 }
 
-func (c RuntimeClient) ListRecent(ctx context.Context, account config.AccountConfig, mailbox string, limit int) ([]mail.Summary, error) {
+func (c RuntimeClient) ListRecent(ctx context.Context, account config.AccountConfig, mailbox string, limit int, offset int) (app.ListResult, error) {
 	_ = ctx
 	c.debug.Printf("imap connect: %s:%d tls=%t", account.IMAP.Host, account.IMAP.Port, account.IMAP.TLS)
 	client, err := c.dial(account)
 	if err != nil {
 		c.debug.Printf("imap dial failed: %v", err)
-		return nil, err
+		return app.ListResult{}, err
 	}
 	defer client.Close()
 	defer client.Logout()
@@ -110,35 +111,49 @@ func (c RuntimeClient) ListRecent(ctx context.Context, account config.AccountCon
 	c.debug.Printf("imap login: username=%s", account.Auth.Username)
 	if err := client.Login(account.Auth.Username, account.Auth.Password).Wait(); err != nil {
 		c.debug.Printf("imap login failed: %v", err)
-		return nil, err
+		return app.ListResult{}, err
 	}
 	c.debug.Printf("imap login ok")
 	c.debug.Printf("imap select: mailbox=%s", mailbox)
 	if _, err := client.Select(mailbox).Wait(); err != nil {
 		c.debug.Printf("imap select failed: %v", err)
-		return nil, err
+		return app.ListResult{}, err
 	}
 
 	c.debug.Printf("imap search: recent messages")
 	searchData, err := client.UIDSearch().Wait()
 	if err != nil {
 		c.debug.Printf("imap search failed: %v", err)
-		return nil, err
+		return app.ListResult{}, err
 	}
 	uids := uidSlice(searchData)
-	c.debug.Printf("imap search returned %d uid(s)", len(uids))
-	if len(uids) == 0 {
-		return []mail.Summary{}, nil
-	}
-	if limit > 0 && len(uids) > limit {
-		uids = uids[len(uids)-limit:]
+	total := len(uids)
+	c.debug.Printf("imap search returned %d uid(s)", total)
+	if total == 0 || offset >= total {
+		return app.ListResult{Summaries: []mail.Summary{}, Total: total}, nil
 	}
 
-	c.debug.Printf("imap fetch: requested %d uid(s) in list mode", len(uids))
+	end := total - offset
+	if end < 0 {
+		end = 0
+	}
+	start := 0
+	if limit > 0 {
+		start = end - limit
+		if start < 0 {
+			start = 0
+		}
+	}
+	if start > end {
+		start = end
+	}
+	uids = uids[start:end]
+
+	c.debug.Printf("imap fetch: requested %d uid(s) in list mode offset=%d limit=%d", len(uids), offset, limit)
 	messages, err := collectMessages(client.Fetch(uids, false))
 	if err != nil {
 		c.debug.Printf("imap fetch failed: %v", err)
-		return nil, err
+		return app.ListResult{}, err
 	}
 
 	summaries := make([]mail.Summary, 0, len(messages))
@@ -154,7 +169,7 @@ func (c RuntimeClient) ListRecent(ctx context.Context, account config.AccountCon
 	sort.SliceStable(summaries, func(i, j int) bool {
 		return summaries[i].UID > summaries[j].UID
 	})
-	return summaries, nil
+	return app.ListResult{Summaries: summaries, Total: total}, nil
 }
 
 func (c RuntimeClient) GetByUID(ctx context.Context, account config.AccountConfig, mailbox string, uid uint32) (mail.Detail, error) {

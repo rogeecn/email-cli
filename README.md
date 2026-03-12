@@ -98,6 +98,12 @@ Render JSON:
 go run ./cmd/email -A personal --format json
 ```
 
+List the next page of messages:
+
+```bash
+go run ./cmd/email -A personal --offset 10 --limit 10
+```
+
 Print receive debug logs to `stderr`:
 
 ```bash
@@ -112,12 +118,14 @@ go run ./cmd/email -A personal --debug
 email
 email -A personal
 email -A personal --mailbox INBOX --limit 20
+email -A personal --offset 10 --limit 10
 ```
 
 Default behavior:
 - uses `default_account`
 - uses default mailbox from config or `INBOX`
 - uses default page size from config or `20`
+- uses default offset `0`
 - uses default output format from config or `plain`
 - with `--debug`, writes receive diagnostics to `stderr`
 
@@ -136,7 +144,7 @@ This prints message metadata and the full body.
 
 Human-friendly terminal output.
 
-- list mode prints aligned columns
+- list mode prints a summary header plus each email as a multi-line block with subject, id, sender, recipients, received time, and real attachment summary
 - detail mode prints sections for metadata, body, attachments, and headers
 
 ### `json`

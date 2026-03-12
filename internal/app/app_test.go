@@ -21,20 +21,22 @@ func (f fakeAccountLoader) Load() (config.Config, error) {
 type fakeMailService struct {
 	listMailbox  string
 	listLimit    int
+	listOffset   int
 	getMailbox   string
 	getUID       uint32
-	listResult   []mail.Summary
+	listResult   ListResult
 	detailResult mail.Detail
 	listErr      error
 	getErr       error
 }
 
-func (f *fakeMailService) ListRecent(_ context.Context, account config.AccountConfig, mailbox string, limit int) ([]mail.Summary, error) {
+func (f *fakeMailService) ListRecent(_ context.Context, account config.AccountConfig, mailbox string, limit int, offset int) (ListResult, error) {
 	_ = account
 	f.listMailbox = mailbox
 	f.listLimit = limit
+	f.listOffset = offset
 	if f.listErr != nil {
-		return nil, f.listErr
+		return ListResult{}, f.listErr
 	}
 	return f.listResult, nil
 }
@@ -59,21 +61,24 @@ func TestApplicationRunListMode(t *testing.T) {
 			},
 		},
 	}}
-	service := &fakeMailService{listResult: []mail.Summary{{UID: 7, Subject: "Hello"}}}
+	service := &fakeMailService{listResult: ListResult{Summaries: []mail.Summary{{UID: 7, Subject: "Hello"}}, Total: 1}}
 	application := New(loader, service)
 
-	result, err := application.Run(context.Background(), Options{})
+	result, err := application.Run(context.Background(), Options{Offset: 5})
 	if err != nil {
 		t.Fatalf("Run returned error: %v", err)
 	}
 	if result.Mode != ModeList {
 		t.Fatalf("Mode = %q, want %q", result.Mode, ModeList)
 	}
-	if service.listMailbox != "INBOX" || service.listLimit != 20 {
-		t.Fatalf("list called with mailbox=%q limit=%d", service.listMailbox, service.listLimit)
+	if service.listMailbox != "INBOX" || service.listLimit != 20 || service.listOffset != 5 {
+		t.Fatalf("list called with mailbox=%q limit=%d offset=%d", service.listMailbox, service.listLimit, service.listOffset)
 	}
 	if len(result.Summaries) != 1 || result.Summaries[0].UID != 7 {
 		t.Fatalf("unexpected list result: %+v", result.Summaries)
+	}
+	if result.ListMetadata.Total != 1 || result.ListMetadata.Limit != 20 || result.ListMetadata.Offset != 5 {
+		t.Fatalf("unexpected list metadata: %+v", result.ListMetadata)
 	}
 }
 

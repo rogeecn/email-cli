@@ -4,17 +4,23 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
-	"text/tabwriter"
 
 	"github.com/rogeecn/email-cli/internal/mail"
 	"gopkg.in/yaml.v3"
 )
 
-func RenderSummaries(summaries []mail.Summary, format string) ([]byte, error) {
+type ListMetadata struct {
+	Total  int
+	Limit  int
+	Offset int
+}
+
+func RenderSummaries(summaries []mail.Summary, format string, metadata ListMetadata) ([]byte, error) {
 	switch normalizedFormat(format) {
 	case "plain":
-		return renderSummariesPlain(summaries), nil
+		return renderSummariesPlain(summaries, metadata), nil
 	case "json":
 		return json.MarshalIndent(summaries, "", "  ")
 	case "yaml":
@@ -44,24 +50,31 @@ func normalizedFormat(format string) string {
 	return strings.ToLower(format)
 }
 
-func renderSummariesPlain(summaries []mail.Summary) []byte {
+func renderSummariesPlain(summaries []mail.Summary, metadata ListMetadata) []byte {
 	var buffer bytes.Buffer
-	writer := tabwriter.NewWriter(&buffer, 0, 0, 2, ' ', 0)
 
-	fmt.Fprintln(writer, "UID\tDATE\tFROM\tTO\tSUBJECT\tSEEN")
-	for _, summary := range summaries {
-		fmt.Fprintf(writer, "%d\t%s\t%s\t%s\t%s\t%t\n",
-			summary.UID,
-			summary.Date,
-			summary.From,
-			strings.Join(summary.To, ", "),
-			summary.Subject,
-			summary.Seen,
-		)
+	fmt.Fprintf(&buffer, "Showing %d emails (total %d, limit %d, offset %d)\n\n", len(summaries), metadata.Total, metadata.Limit, metadata.Offset)
+	for index, summary := range summaries {
+		buffer.WriteString(summary.Subject)
+		buffer.WriteByte('\n')
+		fmt.Fprintf(&buffer, "  id: %s\n", strconv.FormatUint(uint64(summary.UID), 10))
+		fmt.Fprintf(&buffer, "  from: %s\n", summary.From)
+		fmt.Fprintf(&buffer, "  to: %s\n", strings.Join(summary.To, ", "))
+		fmt.Fprintf(&buffer, "  received: %s\n", summary.Date)
+		fmt.Fprintf(&buffer, "  attachments: %s (%d)\n", attachmentLabel(summary.AttachmentCount), summary.AttachmentCount)
+		if index < len(summaries)-1 {
+			buffer.WriteByte('\n')
+		}
 	}
 
-	_ = writer.Flush()
 	return buffer.Bytes()
+}
+
+func attachmentLabel(count int) string {
+	if count > 0 {
+		return "yes"
+	}
+	return "no"
 }
 
 func renderDetailPlain(detail mail.Detail) []byte {

@@ -16,6 +16,9 @@ func TestBuildRequestUsesCLIOverridesAndDefaults(t *testing.T) {
 	if request.Limit != 20 {
 		t.Fatalf("Limit = %d, want 20", request.Limit)
 	}
+	if request.Offset != 0 {
+		t.Fatalf("Offset = %d, want 0", request.Offset)
+	}
 	if request.Format != "plain" {
 		t.Fatalf("Format = %q, want %q", request.Format, "plain")
 	}
@@ -26,6 +29,7 @@ func TestBuildRequestUsesCLIOverridesAndDefaults(t *testing.T) {
 	request = BuildRequest(Options{
 		Mailbox: "Archive",
 		Limit:   50,
+		Offset:  5,
 		Format:  "json",
 		UID:     12345,
 	}, accountDefaults)
@@ -35,6 +39,9 @@ func TestBuildRequestUsesCLIOverridesAndDefaults(t *testing.T) {
 	}
 	if request.Limit != 50 {
 		t.Fatalf("Limit = %d, want 50", request.Limit)
+	}
+	if request.Offset != 5 {
+		t.Fatalf("Offset = %d, want 5", request.Offset)
 	}
 	if request.Format != "json" {
 		t.Fatalf("Format = %q, want %q", request.Format, "json")
