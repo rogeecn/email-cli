@@ -36,11 +36,11 @@ Not supported yet:
 
 ### 1. Prepare config
 
-Copy `examples/config.toml` to your local config path:
+Copy `config.example.toml` to your local config path:
 
 ```bash
 mkdir -p ~/.config/email-cli
-cp examples/config.toml ~/.config/email-cli/config.toml
+cp config.example.toml ~/.config/email-cli/config.toml
 ```
 
 You can also keep config anywhere and pass it explicitly with `-c, --config`.
@@ -157,7 +157,7 @@ Structured output that is easier to inspect manually.
 
 ## Config Example
 
-See `examples/config.toml` for a complete sample covering:
+See `config.example.toml` for a complete sample covering:
 - `qq`
 - `gmail`
 - `selfhost`
