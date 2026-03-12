@@ -1,6 +1,7 @@
 package app
 
 type Options struct {
+	Account string
 	Mailbox string
 	Limit   int
 	Format  string

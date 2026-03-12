@@ -1,0 +1,42 @@
+default_account = "personal"
+
+[accounts.personal]
+provider = "qq"
+
+[accounts.personal.auth]
+username = "your-qq-account@qq.com"
+password = "your-qq-imap-app-password"
+
+[accounts.personal.defaults]
+mailbox = "INBOX"
+page_size = 20
+format = "plain"
+
+[accounts.work]
+provider = "gmail"
+
+[accounts.work.auth]
+username = "your-gmail@gmail.com"
+password = "your-gmail-app-password"
+
+[accounts.work.defaults]
+mailbox = "INBOX"
+page_size = 20
+format = "plain"
+
+[accounts.selfhost]
+provider = "selfhost"
+
+[accounts.selfhost.auth]
+username = "user@example.com"
+password = "your-selfhost-password"
+
+[accounts.selfhost.imap]
+host = "mail.example.com"
+port = 993
+tls = true
+
+[accounts.selfhost.defaults]
+mailbox = "INBOX"
+page_size = 20
+format = "plain"

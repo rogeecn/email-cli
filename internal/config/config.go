@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	toml "github.com/pelletier/go-toml/v2"
 )
@@ -35,6 +36,19 @@ type DefaultOptions struct {
 	Mailbox  string `toml:"mailbox"`
 	PageSize int    `toml:"page_size"`
 	Format   string `toml:"format"`
+}
+
+func DefaultPath() string {
+	if xdgConfigHome := os.Getenv("XDG_CONFIG_HOME"); xdgConfigHome != "" {
+		return filepath.Join(xdgConfigHome, "email-cli", "config.toml")
+	}
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return filepath.Join(".config", "email-cli", "config.toml")
+	}
+
+	return filepath.Join(homeDir, ".config", "email-cli", "config.toml")
 }
 
 func LoadFile(path string) (Config, error) {

@@ -112,3 +112,27 @@ func TestResolveAccountErrorsForMissingDefault(t *testing.T) {
 		t.Fatalf("expected error for missing default account")
 	}
 }
+
+func TestDefaultPathUsesXDGConfigHome(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+	t.Setenv("HOME", filepath.Join(tempDir, "home"))
+
+	got := DefaultPath()
+	want := filepath.Join(tempDir, "email-cli", "config.toml")
+	if got != want {
+		t.Fatalf("DefaultPath = %q, want %q", got, want)
+	}
+}
+
+func TestDefaultPathFallsBackToHomeConfig(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("HOME", tempDir)
+
+	got := DefaultPath()
+	want := filepath.Join(tempDir, ".config", "email-cli", "config.toml")
+	if got != want {
+		t.Fatalf("DefaultPath = %q, want %q", got, want)
+	}
+}
