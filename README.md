@@ -98,6 +98,12 @@ Render JSON:
 go run ./cmd/email -A personal --format json
 ```
 
+Print receive debug logs to `stderr`:
+
+```bash
+go run ./cmd/email -A personal --debug
+```
+
 ## Command Reference
 
 ### List messages
@@ -113,6 +119,7 @@ Default behavior:
 - uses default mailbox from config or `INBOX`
 - uses default page size from config or `20`
 - uses default output format from config or `plain`
+- with `--debug`, writes receive diagnostics to `stderr`
 
 ### Show message detail
 

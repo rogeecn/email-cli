@@ -18,6 +18,7 @@ import (
 type cliOptions struct {
 	Account    string
 	ConfigPath string
+	Debug      bool
 	Mailbox    string
 	Limit      int
 	Format     string
@@ -51,6 +52,7 @@ func newFlagSet() (*flag.FlagSet, *cliOptions) {
 	flagSet.StringVar(&options.Account, "A", "", "account alias from config")
 	flagSet.StringVar(&options.ConfigPath, "config", "", "custom config file path")
 	flagSet.StringVar(&options.ConfigPath, "c", "", "custom config file path")
+	flagSet.BoolVar(&options.Debug, "debug", false, "print receive debug logs to stderr")
 	flagSet.StringVar(&options.Mailbox, "mailbox", "", "mailbox name")
 	flagSet.IntVar(&options.Limit, "limit", 0, "max messages to fetch")
 	flagSet.StringVar(&options.Format, "format", "", "output format")
@@ -68,6 +70,7 @@ func newFlagSet() (*flag.FlagSet, *cliOptions) {
 		fmt.Fprintf(output, "  email -A personal\n")
 		fmt.Fprintf(output, "  email -c ./config.toml -A personal\n")
 		fmt.Fprintf(output, "  email -A personal --uid 12345\n")
+		fmt.Fprintf(output, "  email -A personal --debug\n")
 		fmt.Fprintf(output, "  email -A work --format json\n\n")
 		fmt.Fprintf(output, "Config:\n")
 		fmt.Fprintf(output, "  default path: %s\n\n", DefaultConfigPath())
@@ -156,6 +159,10 @@ func main() {
 
 	loader := fileLoader{path: configPath}
 	mailRuntime := imapservice.NewDefaultRuntimeClient()
+	if cliOptions.Debug {
+		mailRuntime = mailRuntime.WithDebugOutput(os.Stderr)
+		fmt.Fprintf(os.Stderr, "[debug] config path: %s\n", configPath)
+	}
 	application := app.New(loader, mailRuntime)
 
 	exitCode := run(context.Background(), os.Args[1:], os.Stdout, os.Stderr, func() runner {

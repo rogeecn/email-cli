@@ -12,8 +12,8 @@ import (
 	"github.com/rogeecn/email-cli/internal/mail"
 )
 
-func TestParseFlagsReadsAliasUIDAndConfigPath(t *testing.T) {
-	options, err := parseFlags([]string{"-A", "personal", "--uid", "42", "--mailbox", "Archive", "--limit", "10", "--format", "json", "-c", "./custom.toml"})
+func TestParseFlagsReadsAliasUIDConfigPathAndDebug(t *testing.T) {
+	options, err := parseFlags([]string{"-A", "personal", "--uid", "42", "--mailbox", "Archive", "--limit", "10", "--format", "json", "-c", "./custom.toml", "--debug"})
 	if err != nil {
 		t.Fatalf("parseFlags returned error: %v", err)
 	}
@@ -36,9 +36,12 @@ func TestParseFlagsReadsAliasUIDAndConfigPath(t *testing.T) {
 	if options.ConfigPath != "./custom.toml" {
 		t.Fatalf("ConfigPath = %q, want %q", options.ConfigPath, "./custom.toml")
 	}
+	if !options.Debug {
+		t.Fatalf("Debug = false, want true")
+	}
 }
 
-func TestNewFlagSetSupportsShortAliasAndConfigFlag(t *testing.T) {
+func TestNewFlagSetSupportsShortAliasConfigAndDebugFlag(t *testing.T) {
 	flagSet, _ := newFlagSet()
 	if flagSet.Lookup("A") == nil {
 		t.Fatalf("short -A flag should be registered")
@@ -51,6 +54,9 @@ func TestNewFlagSetSupportsShortAliasAndConfigFlag(t *testing.T) {
 	}
 	if flagSet.Lookup("config") == nil {
 		t.Fatalf("--config flag should be registered")
+	}
+	if flagSet.Lookup("debug") == nil {
+		t.Fatalf("--debug flag should be registered")
 	}
 	if flagSet.ErrorHandling() != flag.ContinueOnError {
 		t.Fatalf("ErrorHandling = %v, want %v", flagSet.ErrorHandling(), flag.ContinueOnError)

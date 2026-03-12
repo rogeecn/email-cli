@@ -8,6 +8,7 @@ import (
 	"net"
 	"sort"
 	"strings"
+	"sync"
 
 	imapv2 "github.com/emersion/go-imap/v2"
 	"github.com/emersion/go-imap/v2/imapclient"
@@ -61,12 +62,32 @@ type sessionClient interface {
 
 type dialerFunc func(account config.AccountConfig) (sessionClient, error)
 
+type debugLogger struct {
+	writer io.Writer
+	mutex  sync.Mutex
+}
+
+func (l *debugLogger) Printf(format string, args ...any) {
+	if l == nil || l.writer == nil {
+		return
+	}
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+	fmt.Fprintf(l.writer, "[debug] "+format+"\n", args...)
+}
+
 type RuntimeClient struct {
-	dial dialerFunc
+	dial  dialerFunc
+	debug *debugLogger
 }
 
 func NewRuntimeClient(dial dialerFunc) RuntimeClient {
 	return RuntimeClient{dial: dial}
+}
+
+func (c RuntimeClient) WithDebugOutput(writer io.Writer) RuntimeClient {
+	c.debug = &debugLogger{writer: writer}
+	return c
 }
 
 func NewDefaultRuntimeClient() RuntimeClient {
@@ -77,25 +98,35 @@ func NewDefaultRuntimeClient() RuntimeClient {
 
 func (c RuntimeClient) ListRecent(ctx context.Context, account config.AccountConfig, mailbox string, limit int) ([]mail.Summary, error) {
 	_ = ctx
+	c.debug.Printf("imap connect: %s:%d tls=%t", account.IMAP.Host, account.IMAP.Port, account.IMAP.TLS)
 	client, err := c.dial(account)
 	if err != nil {
+		c.debug.Printf("imap dial failed: %v", err)
 		return nil, err
 	}
 	defer client.Close()
 	defer client.Logout()
 
+	c.debug.Printf("imap login: username=%s", account.Auth.Username)
 	if err := client.Login(account.Auth.Username, account.Auth.Password).Wait(); err != nil {
+		c.debug.Printf("imap login failed: %v", err)
 		return nil, err
 	}
+	c.debug.Printf("imap login ok")
+	c.debug.Printf("imap select: mailbox=%s", mailbox)
 	if _, err := client.Select(mailbox).Wait(); err != nil {
+		c.debug.Printf("imap select failed: %v", err)
 		return nil, err
 	}
 
+	c.debug.Printf("imap search: recent messages")
 	searchData, err := client.UIDSearch().Wait()
 	if err != nil {
+		c.debug.Printf("imap search failed: %v", err)
 		return nil, err
 	}
 	uids := uidSlice(searchData)
+	c.debug.Printf("imap search returned %d uid(s)", len(uids))
 	if len(uids) == 0 {
 		return []mail.Summary{}, nil
 	}
@@ -103,8 +134,10 @@ func (c RuntimeClient) ListRecent(ctx context.Context, account config.AccountCon
 		uids = uids[len(uids)-limit:]
 	}
 
+	c.debug.Printf("imap fetch: requested %d uid(s) in list mode", len(uids))
 	messages, err := collectMessages(client.Fetch(uids, false))
 	if err != nil {
+		c.debug.Printf("imap fetch failed: %v", err)
 		return nil, err
 	}
 
@@ -112,7 +145,8 @@ func (c RuntimeClient) ListRecent(ctx context.Context, account config.AccountCon
 	for _, message := range messages {
 		detail, err := mail.ParseMessage(message.uid, message.flags, strings.NewReader(message.body))
 		if err != nil {
-			return nil, err
+			c.debug.Printf("parse message skipped: uid=%d err=%v", message.uid, err)
+			continue
 		}
 		summaries = append(summaries, detail.Summary)
 	}
@@ -125,22 +159,31 @@ func (c RuntimeClient) ListRecent(ctx context.Context, account config.AccountCon
 
 func (c RuntimeClient) GetByUID(ctx context.Context, account config.AccountConfig, mailbox string, uid uint32) (mail.Detail, error) {
 	_ = ctx
+	c.debug.Printf("imap connect: %s:%d tls=%t", account.IMAP.Host, account.IMAP.Port, account.IMAP.TLS)
 	client, err := c.dial(account)
 	if err != nil {
+		c.debug.Printf("imap dial failed: %v", err)
 		return mail.Detail{}, err
 	}
 	defer client.Close()
 	defer client.Logout()
 
+	c.debug.Printf("imap login: username=%s", account.Auth.Username)
 	if err := client.Login(account.Auth.Username, account.Auth.Password).Wait(); err != nil {
+		c.debug.Printf("imap login failed: %v", err)
 		return mail.Detail{}, err
 	}
+	c.debug.Printf("imap login ok")
+	c.debug.Printf("imap select: mailbox=%s", mailbox)
 	if _, err := client.Select(mailbox).Wait(); err != nil {
+		c.debug.Printf("imap select failed: %v", err)
 		return mail.Detail{}, err
 	}
 
+	c.debug.Printf("imap fetch: requested uid=%d in detail mode", uid)
 	messages, err := collectMessages(client.Fetch([]uint32{uid}, true))
 	if err != nil {
+		c.debug.Printf("imap fetch failed: %v", err)
 		return mail.Detail{}, err
 	}
 	if len(messages) == 0 {
@@ -253,8 +296,12 @@ func (c wrappedClient) Select(mailbox string) selectCommand {
 	return c.inner.Select(mailbox, nil)
 }
 
+func uidSearchCriteria() *imapv2.SearchCriteria {
+	return &imapv2.SearchCriteria{}
+}
+
 func (c wrappedClient) UIDSearch() searchCommand {
-	return c.inner.UIDSearch(&imapv2.SearchCriteria{UID: []imapv2.UIDSet{imapv2.UIDSetNum(1, 0)}}, nil)
+	return c.inner.UIDSearch(uidSearchCriteria(), nil)
 }
 
 func (c wrappedClient) Fetch(uids []uint32, _ bool) fetchCommand {

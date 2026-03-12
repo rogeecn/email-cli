@@ -1,6 +1,7 @@
 package imap
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -175,6 +176,56 @@ func TestRuntimeClientGetsMessageByUID(t *testing.T) {
 	}
 }
 
+func TestRuntimeClientListRecentSkipsUnknownCharsetMessages(t *testing.T) {
+	gbkRaw := strings.Join([]string{
+		"From: Sender <sender@example.com>",
+		"To: Bob <bob@example.com>",
+		"Subject: =?GBK?B?1eLKx9bQ?=",
+		"Date: Thu, 12 Mar 2026 10:00:00 +0000",
+		"MIME-Version: 1.0",
+		"Content-Type: text/plain; charset=gbk",
+		"",
+		"test",
+	}, "\r\n")
+	goodRaw := strings.Join([]string{
+		"From: Carol <carol@example.com>",
+		"To: Dan <dan@example.com>",
+		"Subject: Second",
+		"Date: Thu, 12 Mar 2026 11:00:00 +0000",
+		"",
+		"Two",
+	}, "\r\n")
+	var logs bytes.Buffer
+	session := &fakeSessionClient{
+		searchResult: []imapv2.UID{10, 20},
+		fetchMessages: []*fakeFetchMessage{
+			{items: []fetchItem{fakeFetchUID{uid: 10}, fakeFetchFlags{flags: []string{}}, fakeFetchBodySection{literal: strings.NewReader(gbkRaw)}}},
+			{items: []fetchItem{fakeFetchUID{uid: 20}, fakeFetchFlags{flags: []string{"\\Seen"}}, fakeFetchBodySection{literal: strings.NewReader(goodRaw)}}},
+		},
+	}
+	client := NewRuntimeClient(func(account config.AccountConfig) (sessionClient, error) {
+		return session, nil
+	}).WithDebugOutput(&logs)
+
+	summaries, err := client.ListRecent(context.Background(), config.AccountConfig{
+		Provider: "qq",
+		Auth:     config.AuthConfig{Username: "user@example.com", Password: "secret"},
+		IMAP:     config.IMAPConfig{Host: "imap.qq.com", Port: 993, TLS: true},
+	}, "INBOX", 20)
+	if err != nil {
+		t.Fatalf("ListRecent returned error: %v", err)
+	}
+	if len(summaries) != 1 {
+		t.Fatalf("len(summaries) = %d, want 1", len(summaries))
+	}
+	if summaries[0].Subject != "Second" {
+		t.Fatalf("Subject = %q, want %q", summaries[0].Subject, "Second")
+	}
+	if !strings.Contains(logs.String(), "parse message skipped") {
+		t.Fatalf("debug logs should mention skipped parse error, got %q", logs.String())
+	}
+}
+
 func TestRuntimeClientPropagatesDialErrors(t *testing.T) {
 	expectedErr := errors.New("dial failed")
 	client := NewRuntimeClient(func(account config.AccountConfig) (sessionClient, error) {
@@ -184,6 +235,51 @@ func TestRuntimeClientPropagatesDialErrors(t *testing.T) {
 	_, err := client.ListRecent(context.Background(), config.AccountConfig{}, "INBOX", 1)
 	if !errors.Is(err, expectedErr) {
 		t.Fatalf("ListRecent error = %v, want %v", err, expectedErr)
+	}
+}
+
+func TestRuntimeClientWritesDebugLogs(t *testing.T) {
+	raw := "From: Alice <alice@example.com>\r\nTo: Bob <bob@example.com>\r\nSubject: First\r\nDate: Thu, 12 Mar 2026 10:00:00 +0000\r\n\r\nOne"
+	session := &fakeSessionClient{
+		searchResult: []imapv2.UID{10},
+		fetchMessages: []*fakeFetchMessage{
+			{items: []fetchItem{fakeFetchUID{uid: 10}, fakeFetchFlags{flags: []string{"\\Seen"}}, fakeFetchBodySection{literal: strings.NewReader(raw)}}},
+		},
+	}
+	var logs bytes.Buffer
+	client := NewRuntimeClient(func(account config.AccountConfig) (sessionClient, error) {
+		return session, nil
+	})
+	client = client.WithDebugOutput(&logs)
+
+	_, err := client.ListRecent(context.Background(), config.AccountConfig{
+		Provider: "qq",
+		Auth:     config.AuthConfig{Username: "user@example.com", Password: "secret"},
+		IMAP:     config.IMAPConfig{Host: "imap.qq.com", Port: 993, TLS: true},
+	}, "INBOX", 1)
+	if err != nil {
+		t.Fatalf("ListRecent returned error: %v", err)
+	}
+
+	text := logs.String()
+	if !strings.Contains(text, "imap connect") {
+		t.Fatalf("debug logs should include connect stage, got %q", text)
+	}
+	if !strings.Contains(text, "imap login ok") {
+		t.Fatalf("debug logs should include login stage, got %q", text)
+	}
+	if !strings.Contains(text, "imap search returned 1 uid") {
+		t.Fatalf("debug logs should include search result, got %q", text)
+	}
+}
+
+func TestUIDSearchCriteriaFetchesAllMessages(t *testing.T) {
+	criteria := uidSearchCriteria()
+	if criteria == nil {
+		t.Fatalf("criteria should not be nil")
+	}
+	if len(criteria.UID) != 0 {
+		t.Fatalf("UID criteria should be empty to fetch all messages, got %+v", criteria.UID)
 	}
 }
 
