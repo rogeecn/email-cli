@@ -16,11 +16,12 @@ import (
 )
 
 type cliOptions struct {
-	Account string
-	Mailbox string
-	Limit   int
-	Format  string
-	UID     uint
+	Account    string
+	ConfigPath string
+	Mailbox    string
+	Limit      int
+	Format     string
+	UID        uint
 }
 
 type runner interface {
@@ -48,6 +49,8 @@ func newFlagSet() (*flag.FlagSet, *cliOptions) {
 	options := &cliOptions{}
 	flagSet.StringVar(&options.Account, "account", "", "account alias from config")
 	flagSet.StringVar(&options.Account, "A", "", "account alias from config")
+	flagSet.StringVar(&options.ConfigPath, "config", "", "custom config file path")
+	flagSet.StringVar(&options.ConfigPath, "c", "", "custom config file path")
 	flagSet.StringVar(&options.Mailbox, "mailbox", "", "mailbox name")
 	flagSet.IntVar(&options.Limit, "limit", 0, "max messages to fetch")
 	flagSet.StringVar(&options.Format, "format", "", "output format")
@@ -63,6 +66,7 @@ func newFlagSet() (*flag.FlagSet, *cliOptions) {
 		fmt.Fprintf(output, "Examples:\n")
 		fmt.Fprintf(output, "  email\n")
 		fmt.Fprintf(output, "  email -A personal\n")
+		fmt.Fprintf(output, "  email -c ./config.toml -A personal\n")
 		fmt.Fprintf(output, "  email -A personal --uid 12345\n")
 		fmt.Fprintf(output, "  email -A work --format json\n\n")
 		fmt.Fprintf(output, "Config:\n")
@@ -139,7 +143,17 @@ func run(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer,
 }
 
 func main() {
-	configPath := config.DefaultPath()
+	cliOptions, err := parseFlags(os.Args[1:])
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
+
+	configPath := DefaultConfigPath()
+	if cliOptions.ConfigPath != "" {
+		configPath = cliOptions.ConfigPath
+	}
+
 	loader := fileLoader{path: configPath}
 	mailRuntime := imapservice.NewDefaultRuntimeClient()
 	application := app.New(loader, mailRuntime)

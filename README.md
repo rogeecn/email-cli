@@ -43,6 +43,8 @@ mkdir -p ~/.config/email-cli
 cp examples/config.toml ~/.config/email-cli/config.toml
 ```
 
+You can also keep config anywhere and pass it explicitly with `-c, --config`.
+
 Default config path:
 
 ```text
@@ -76,6 +78,12 @@ Using a named account:
 
 ```bash
 go run ./cmd/email -A personal
+```
+
+Using a custom config path:
+
+```bash
+go run ./cmd/email -c ./config.toml -A personal
 ```
 
 Show a single message by UID:
