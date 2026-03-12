@@ -136,7 +136,7 @@ email --uid 12345
 email -A personal --uid 12345
 ```
 
-This prints message metadata and the full body.
+This prints message metadata and the full body. In `plain` format, message headers are hidden by default and only shown with `--debug`.
 
 ## Output Formats
 
@@ -145,7 +145,7 @@ This prints message metadata and the full body.
 Human-friendly terminal output.
 
 - list mode prints a summary header plus each email as a multi-line block with subject, id, sender, recipients, received time, and real attachment summary
-- detail mode prints sections for metadata, body, attachments, and headers
+- detail mode prints sections for metadata, body, and attachments; headers are only shown in `plain` format when `--debug` is enabled
 
 ### `json`
 

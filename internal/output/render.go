@@ -30,10 +30,10 @@ func RenderSummaries(summaries []mail.Summary, format string, metadata ListMetad
 	}
 }
 
-func RenderDetail(detail mail.Detail, format string) ([]byte, error) {
+func RenderDetail(detail mail.Detail, format string, showHeaders bool) ([]byte, error) {
 	switch normalizedFormat(format) {
 	case "plain":
-		return renderDetailPlain(detail), nil
+		return renderDetailPlain(detail, showHeaders), nil
 	case "json":
 		return json.MarshalIndent(detail, "", "  ")
 	case "yaml":
@@ -77,7 +77,7 @@ func attachmentLabel(count int) string {
 	return "no"
 }
 
-func renderDetailPlain(detail mail.Detail) []byte {
+func renderDetailPlain(detail mail.Detail, showHeaders bool) []byte {
 	var buffer bytes.Buffer
 
 	fmt.Fprintf(&buffer, "UID: %d\n", detail.UID)
@@ -112,7 +112,7 @@ func renderDetailPlain(detail mail.Detail) []byte {
 		}
 	}
 
-	if len(detail.Headers) > 0 {
+	if showHeaders && len(detail.Headers) > 0 {
 		buffer.WriteString("\nHeaders:\n")
 		for key, value := range detail.Headers {
 			fmt.Fprintf(&buffer, "%s: %s\n", key, value)

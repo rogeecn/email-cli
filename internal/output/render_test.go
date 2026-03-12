@@ -77,8 +77,8 @@ func TestRenderSummaryPlain(t *testing.T) {
 	}
 }
 
-func TestRenderDetailPlain(t *testing.T) {
-	out, err := RenderDetail(sampleDetail(), "plain")
+func TestRenderDetailPlainHidesHeadersByDefault(t *testing.T) {
+	out, err := RenderDetail(sampleDetail(), "plain", false)
 	if err != nil {
 		t.Fatalf("RenderDetail returned error: %v", err)
 	}
@@ -93,10 +93,28 @@ func TestRenderDetailPlain(t *testing.T) {
 	if !strings.Contains(text, "report.pdf") {
 		t.Fatalf("plain detail should include attachment name")
 	}
+	if strings.Contains(text, "Headers:") {
+		t.Fatalf("plain detail should hide headers by default")
+	}
+}
+
+func TestRenderDetailPlainShowsHeadersInDebugMode(t *testing.T) {
+	out, err := RenderDetail(sampleDetail(), "plain", true)
+	if err != nil {
+		t.Fatalf("RenderDetail returned error: %v", err)
+	}
+
+	text := string(out)
+	if !strings.Contains(text, "Headers:") {
+		t.Fatalf("plain detail should include headers in debug mode")
+	}
+	if !strings.Contains(text, "Message-ID: <123@example.com>") {
+		t.Fatalf("plain detail should include message header values in debug mode")
+	}
 }
 
 func TestRenderJSONAndYAML(t *testing.T) {
-	jsonOut, err := RenderDetail(sampleDetail(), "json")
+	jsonOut, err := RenderDetail(sampleDetail(), "json", false)
 	if err != nil {
 		t.Fatalf("RenderDetail json returned error: %v", err)
 	}
@@ -109,7 +127,7 @@ func TestRenderJSONAndYAML(t *testing.T) {
 		t.Fatalf("json subject = %q, want %q", detailJSON.Subject, "Hello")
 	}
 
-	yamlOut, err := RenderDetail(sampleDetail(), "yaml")
+	yamlOut, err := RenderDetail(sampleDetail(), "yaml", false)
 	if err != nil {
 		t.Fatalf("RenderDetail yaml returned error: %v", err)
 	}

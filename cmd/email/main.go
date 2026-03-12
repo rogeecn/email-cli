@@ -116,7 +116,7 @@ func execute(ctx context.Context, appRunner runner, args []string, stdout io.Wri
 
 	var rendered []byte
 	if result.Mode == app.ModeDetail {
-		rendered, err = output.RenderDetail(result.Detail, result.Format)
+		rendered, err = output.RenderDetail(result.Detail, result.Format, cliOptions.Debug)
 	} else {
 		rendered, err = output.RenderSummaries(result.Summaries, result.Format, result.ListMetadata)
 	}

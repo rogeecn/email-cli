@@ -108,6 +108,64 @@ func TestExecuteWritesListOutput(t *testing.T) {
 	}
 }
 
+func TestExecuteWritesDetailWithoutHeadersByDefault(t *testing.T) {
+	runner := &fakeRunner{result: app.Result{
+		Mode:   app.ModeDetail,
+		Format: "plain",
+		Detail: mail.Detail{
+			Summary: mail.Summary{
+				UID:     9,
+				Date:    "2026-03-12T10:00:00Z",
+				From:    "Alice <alice@example.com>",
+				To:      []string{"Bob <bob@example.com>"},
+				Subject: "Hello",
+				Seen:    true,
+			},
+			TextBody: "Plain body",
+			Headers:  map[string]string{"Message-ID": "<123@example.com>"},
+		},
+	}}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err := execute(context.Background(), runner, []string{"--uid", "9"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("execute returned error: %v", err)
+	}
+	if strings.Contains(stdout.String(), "Headers:") {
+		t.Fatalf("stdout should hide headers by default, got %q", stdout.String())
+	}
+}
+
+func TestExecuteWritesDetailHeadersInDebugMode(t *testing.T) {
+	runner := &fakeRunner{result: app.Result{
+		Mode:   app.ModeDetail,
+		Format: "plain",
+		Detail: mail.Detail{
+			Summary: mail.Summary{
+				UID:     9,
+				Date:    "2026-03-12T10:00:00Z",
+				From:    "Alice <alice@example.com>",
+				To:      []string{"Bob <bob@example.com>"},
+				Subject: "Hello",
+				Seen:    true,
+			},
+			TextBody: "Plain body",
+			Headers:  map[string]string{"Message-ID": "<123@example.com>"},
+		},
+	}}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err := execute(context.Background(), runner, []string{"--uid", "9", "--debug"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("execute returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Headers:") {
+		t.Fatalf("stdout should include headers in debug mode, got %q", stdout.String())
+	}
+}
+
 func TestExecuteWritesErrorToStderr(t *testing.T) {
 	runner := &fakeRunner{err: context.DeadlineExceeded}
 
