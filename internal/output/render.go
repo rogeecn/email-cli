@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"html"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -70,11 +72,32 @@ func renderSummariesPlain(summaries []mail.Summary, metadata ListMetadata) []byt
 	return buffer.Bytes()
 }
 
+var htmlStyleTagPattern = regexp.MustCompile(`(?is)<\s*style[^>]*>.*?<\s*/\s*style\s*>`)
+var htmlScriptTagPattern = regexp.MustCompile(`(?is)<\s*script[^>]*>.*?<\s*/\s*script\s*>`)
+var htmlBreakTagPattern = regexp.MustCompile(`(?i)<\s*br\s*/?>`)
+var htmlBlockTagPattern = regexp.MustCompile(`(?i)<\s*/?\s*(p|div|h[1-6]|li|tr|table|section|article|header|footer|ul|ol)\b[^>]*>`)
+var htmlTagPattern = regexp.MustCompile(`(?s)<[^>]+>`)
+var blankLineWithSpacesPattern = regexp.MustCompile(`(?m)[ \t]*\n[ \t]*\n(?:[ \t]*\n)+`)
+
 func attachmentLabel(count int) string {
 	if count > 0 {
 		return "yes"
 	}
 	return "no"
+}
+
+func renderHTMLAsText(value string) string {
+	text := htmlStyleTagPattern.ReplaceAllString(value, "")
+	text = htmlScriptTagPattern.ReplaceAllString(text, "")
+	text = htmlBreakTagPattern.ReplaceAllString(text, "\n")
+	text = htmlBlockTagPattern.ReplaceAllString(text, "\n")
+	text = htmlTagPattern.ReplaceAllString(text, "")
+	text = html.UnescapeString(text)
+	text = strings.ReplaceAll(text, "\u00a0", " ")
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	text = strings.ReplaceAll(text, "\r", "\n")
+	text = blankLineWithSpacesPattern.ReplaceAllString(text, "\n\n")
+	return strings.TrimSpace(text)
 }
 
 func renderDetailPlain(detail mail.Detail, showHeaders bool) []byte {
@@ -101,7 +124,7 @@ func renderDetailPlain(detail mail.Detail, showHeaders bool) []byte {
 		buffer.WriteString(detail.TextBody)
 		buffer.WriteByte('\n')
 	} else if detail.HTMLBody != "" {
-		buffer.WriteString(detail.HTMLBody)
+		buffer.WriteString(renderHTMLAsText(detail.HTMLBody))
 		buffer.WriteByte('\n')
 	}
 

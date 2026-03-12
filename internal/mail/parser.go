@@ -64,7 +64,12 @@ func ParseMessage(uid uint32, flags []string, reader io.Reader) (Detail, error) 
 		if err != nil {
 			return Detail{}, err
 		}
-		detail.TextBody = strings.TrimSpace(string(body))
+		content := strings.TrimSpace(string(body))
+		if strings.Contains(mediaType, "html") {
+			detail.HTMLBody = content
+		} else {
+			detail.TextBody = content
+		}
 	}
 
 	return detail, nil

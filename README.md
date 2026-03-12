@@ -145,7 +145,7 @@ This prints message metadata and the full body. In `plain` format, message heade
 Human-friendly terminal output.
 
 - list mode prints a summary header plus each email as a multi-line block with subject, id, sender, recipients, received time, and real attachment summary
-- detail mode prints sections for metadata, body, and attachments; headers are only shown in `plain` format when `--debug` is enabled
+- detail mode prints sections for metadata, body, and attachments; in `plain` format, HTML-only bodies are rendered as readable text and headers are only shown when `--debug` is enabled
 
 ### `json`
 

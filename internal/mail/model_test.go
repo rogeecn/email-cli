@@ -125,3 +125,28 @@ func TestParseMessageBuildsDetailFromRawRFC822(t *testing.T) {
 		t.Fatalf("Seen = false, want true")
 	}
 }
+
+func TestParseMessageAssignsSinglePartHTMLToHTMLBody(t *testing.T) {
+	raw := strings.Join([]string{
+		"From: Alice <alice@example.com>",
+		"To: Bob <bob@example.com>",
+		"Subject: HTML Only",
+		"Date: Thu, 12 Mar 2026 12:00:00 +0000",
+		"Message-ID: <html-only@example.com>",
+		"MIME-Version: 1.0",
+		"Content-Type: text/html; charset=UTF-8",
+		"",
+		"<div>Hello <strong>world</strong><br>Line&nbsp;2</div>",
+	}, "\r\n")
+
+	detail, err := ParseMessage(888, nil, strings.NewReader(raw))
+	if err != nil {
+		t.Fatalf("ParseMessage returned error: %v", err)
+	}
+	if detail.TextBody != "" {
+		t.Fatalf("TextBody = %q, want empty for single-part html", detail.TextBody)
+	}
+	if detail.HTMLBody != "<div>Hello <strong>world</strong><br>Line&nbsp;2</div>" {
+		t.Fatalf("HTMLBody = %q", detail.HTMLBody)
+	}
+}

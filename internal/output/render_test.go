@@ -44,6 +44,34 @@ func sampleDetail() mail.Detail {
 	}
 }
 
+func sampleHTMLOnlyDetail() mail.Detail {
+	return mail.Detail{
+		Summary: mail.Summary{
+			UID:     456,
+			Date:    "2026-03-12T11:00:00Z",
+			From:    "Alice <alice@example.com>",
+			To:      []string{"Bob <bob@example.com>"},
+			Subject: "HTML Only",
+			Seen:    false,
+		},
+		HTMLBody: "<div>Hello <strong>world</strong><br>Line&nbsp;2</div>",
+	}
+}
+
+func sampleStyledHTMLDetail() mail.Detail {
+	return mail.Detail{
+		Summary: mail.Summary{
+			UID:     789,
+			Date:    "2026-03-12T12:00:00Z",
+			From:    "Alice <alice@example.com>",
+			To:      []string{"Bob <bob@example.com>"},
+			Subject: "Styled HTML",
+			Seen:    false,
+		},
+		HTMLBody: "<html><head><style>body{font-size:14px;} p{margin:0;}</style></head><body><p>First</p><p></p><p>Second</p><script>console.log('debug')</script></body></html>",
+	}
+}
+
 func TestRenderSummaryPlain(t *testing.T) {
 	out, err := RenderSummaries(sampleSummary(), "plain", ListMetadata{Total: 1, Limit: 10, Offset: 0})
 	if err != nil {
@@ -110,6 +138,42 @@ func TestRenderDetailPlainShowsHeadersInDebugMode(t *testing.T) {
 	}
 	if !strings.Contains(text, "Message-ID: <123@example.com>") {
 		t.Fatalf("plain detail should include message header values in debug mode")
+	}
+}
+
+func TestRenderDetailPlainConvertsHTMLBodyToText(t *testing.T) {
+	out, err := RenderDetail(sampleHTMLOnlyDetail(), "plain", false)
+	if err != nil {
+		t.Fatalf("RenderDetail returned error: %v", err)
+	}
+
+	text := string(out)
+	if !strings.Contains(text, "Hello world") {
+		t.Fatalf("plain detail should include converted html text, got %q", text)
+	}
+	if !strings.Contains(text, "Line 2") {
+		t.Fatalf("plain detail should preserve readable line content, got %q", text)
+	}
+	if strings.Contains(text, "<strong>") || strings.Contains(text, "<div>") || strings.Contains(text, "&nbsp;") {
+		t.Fatalf("plain detail should not include raw html markup, got %q", text)
+	}
+}
+
+func TestRenderDetailPlainRemovesCSSScriptsAndCollapsesBlankLines(t *testing.T) {
+	out, err := RenderDetail(sampleStyledHTMLDetail(), "plain", false)
+	if err != nil {
+		t.Fatalf("RenderDetail returned error: %v", err)
+	}
+
+	text := string(out)
+	if strings.Contains(text, "font-size") || strings.Contains(text, "console.log") {
+		t.Fatalf("plain detail should remove style and script content, got %q", text)
+	}
+	if !strings.Contains(text, "First\n\nSecond") {
+		t.Fatalf("plain detail should keep at most one blank line between paragraphs, got %q", text)
+	}
+	if strings.Contains(text, "\n\n\n") {
+		t.Fatalf("plain detail should collapse repeated blank lines, got %q", text)
 	}
 }
 
