@@ -1,6 +1,6 @@
 module github.com/rogeecn/email-cli
 
-go 1.22
+go 1.24.0
 
 require (
 	github.com/JohannesKaufmann/html-to-markdown/v2 v2.5.0

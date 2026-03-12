@@ -32,6 +32,16 @@ Not supported yet:
 - Complex search filters
 - OAuth-based authentication
 
+## Installation
+
+Install the latest version with Go:
+
+```bash
+go install github.com/rogeecn/email-cli@latest
+```
+
+This installs the `email-cli` binary into your Go bin directory.
+
 ## Quick Start
 
 ### 1. Prepare config
@@ -68,46 +78,54 @@ For `qq` and `gmail`, use IMAP app passwords where required.
 
 ### 3. Run the CLI
 
-Using the default account:
+For local development, run from the repository root:
 
 ```bash
-go run ./cmd/email
+go run .
+```
+
+The legacy development entry `go run ./cmd/email` still works, but `go run .` matches the installable root package.
+
+After installation, run the installed binary:
+
+```bash
+email-cli
 ```
 
 Using a named account:
 
 ```bash
-go run ./cmd/email -A personal
+email-cli -A personal
 ```
 
 Using a custom config path:
 
 ```bash
-go run ./cmd/email -c ./config.toml -A personal
+email-cli -c ./config.toml -A personal
 ```
 
 Show a single message by UID:
 
 ```bash
-go run ./cmd/email -A personal --uid 12345
+email-cli -A personal --uid 12345
 ```
 
 Render JSON:
 
 ```bash
-go run ./cmd/email -A personal --format json
+email-cli -A personal --format json
 ```
 
 List the next page of messages:
 
 ```bash
-go run ./cmd/email -A personal --offset 10 --limit 10
+email-cli -A personal --offset 10 --limit 10
 ```
 
 Print receive debug logs to `stderr`:
 
 ```bash
-go run ./cmd/email -A personal --debug
+email-cli -A personal --debug
 ```
 
 ## Command Reference

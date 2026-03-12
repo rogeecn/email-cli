@@ -9,11 +9,12 @@ import (
 	"testing"
 
 	"github.com/rogeecn/email-cli/internal/app"
+	"github.com/rogeecn/email-cli/internal/cli"
 	"github.com/rogeecn/email-cli/internal/mail"
 )
 
 func TestParseFlagsReadsAliasUIDConfigPathAndDebug(t *testing.T) {
-	options, err := parseFlags([]string{"-A", "personal", "--uid", "42", "--mailbox", "Archive", "--limit", "10", "--offset", "5", "--format", "json", "-c", "./custom.toml", "--debug"})
+	options, err := cli.ParseFlags([]string{"-A", "personal", "--uid", "42", "--mailbox", "Archive", "--limit", "10", "--offset", "5", "--format", "json", "-c", "./custom.toml", "--debug"})
 	if err != nil {
 		t.Fatalf("parseFlags returned error: %v", err)
 	}
@@ -45,7 +46,7 @@ func TestParseFlagsReadsAliasUIDConfigPathAndDebug(t *testing.T) {
 }
 
 func TestNewFlagSetSupportsShortAliasConfigAndDebugFlag(t *testing.T) {
-	flagSet, _ := newFlagSet()
+	flagSet, _ := cli.NewFlagSet()
 	if flagSet.Lookup("A") == nil {
 		t.Fatalf("short -A flag should be registered")
 	}
@@ -93,7 +94,7 @@ func TestExecuteWritesListOutput(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	err := execute(context.Background(), runner, []string{"-A", "personal"}, &stdout, &stderr)
+	err := cli.Execute(context.Background(), runner, []string{"-A", "personal"}, &stdout, &stderr)
 	if err != nil {
 		t.Fatalf("execute returned error: %v", err)
 	}
@@ -128,7 +129,7 @@ func TestExecuteWritesDetailWithoutHeadersByDefault(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	err := execute(context.Background(), runner, []string{"--uid", "9"}, &stdout, &stderr)
+	err := cli.Execute(context.Background(), runner, []string{"--uid", "9"}, &stdout, &stderr)
 	if err != nil {
 		t.Fatalf("execute returned error: %v", err)
 	}
@@ -157,7 +158,7 @@ func TestExecuteWritesDetailHeadersInDebugMode(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	err := execute(context.Background(), runner, []string{"--uid", "9", "--debug"}, &stdout, &stderr)
+	err := cli.Execute(context.Background(), runner, []string{"--uid", "9", "--debug"}, &stdout, &stderr)
 	if err != nil {
 		t.Fatalf("execute returned error: %v", err)
 	}
@@ -171,7 +172,7 @@ func TestExecuteWritesErrorToStderr(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	err := execute(context.Background(), runner, []string{"--uid", "9"}, &stdout, &stderr)
+	err := cli.Execute(context.Background(), runner, []string{"--uid", "9"}, &stdout, &stderr)
 	if err == nil {
 		t.Fatalf("expected execute to return error")
 	}
@@ -188,7 +189,7 @@ func TestRunReturnsSuccessExitCode(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	exitCode := run(context.Background(), []string{}, &stdout, &stderr, func() runner { return fake })
+	exitCode := cli.Run(context.Background(), []string{}, &stdout, &stderr, func() cli.Runner { return fake })
 	if exitCode != 0 {
 		t.Fatalf("exitCode = %d, want 0", exitCode)
 	}
@@ -199,7 +200,7 @@ func TestRunReturnsErrorExitCodeFromExecution(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	exitCode := run(context.Background(), []string{}, &stdout, &stderr, func() runner { return fake })
+	exitCode := cli.Run(context.Background(), []string{}, &stdout, &stderr, func() cli.Runner { return fake })
 	if exitCode != 1 {
 		t.Fatalf("exitCode = %d, want 1", exitCode)
 	}
@@ -209,7 +210,7 @@ func TestRunReturnsFlagErrorExitCode(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	exitCode := run(context.Background(), []string{"--uid", "not-a-number"}, &stdout, &stderr, func() runner {
+	exitCode := cli.Run(context.Background(), []string{"--uid", "not-a-number"}, &stdout, &stderr, func() cli.Runner {
 		t.Fatalf("runner factory should not be called on flag parse error")
 		return nil
 	})
