@@ -123,8 +123,8 @@ func renderDetailPlain(detail mail.Detail, showHeaders bool) []byte {
 	if detail.TextBody != "" {
 		buffer.WriteString(detail.TextBody)
 		buffer.WriteByte('\n')
-	} else if detail.HTMLBody != "" {
-		buffer.WriteString(renderHTMLAsText(detail.HTMLBody))
+	} else if detail.MarkdownBody != "" {
+		buffer.WriteString(detail.MarkdownBody)
 		buffer.WriteByte('\n')
 	}
 

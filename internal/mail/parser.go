@@ -1,12 +1,15 @@
 package mail
 
 import (
+	"bytes"
 	"io"
 	"strings"
 	"time"
 
+	htmltomarkdown "github.com/JohannesKaufmann/html-to-markdown/v2"
 	message "github.com/emersion/go-message"
 	mailmessage "github.com/emersion/go-message/mail"
+	"golang.org/x/net/html"
 )
 
 func ParseMessage(uid uint32, flags []string, reader io.Reader) (Detail, error) {
@@ -72,6 +75,11 @@ func ParseMessage(uid uint32, flags []string, reader io.Reader) (Detail, error) 
 		}
 	}
 
+	detail.MarkdownBody, err = renderHTMLAsMarkdown(detail.HTMLBody)
+	if err != nil {
+		return Detail{}, err
+	}
+
 	return detail, nil
 }
 
@@ -113,6 +121,129 @@ func parseMultipartInto(detail *Detail, reader *mailmessage.Reader) error {
 			detail.AttachmentCount = len(detail.Attachments)
 		}
 	}
+}
+
+func renderHTMLAsMarkdown(value string) (string, error) {
+	if strings.TrimSpace(value) == "" {
+		return "", nil
+	}
+
+	root, err := html.Parse(strings.NewReader(value))
+	if err != nil {
+		return "", err
+	}
+
+	body := findBodyNode(root)
+	if body == nil {
+		body = root
+	}
+
+	sanitized := cloneSanitizedHTML(body)
+	if sanitized == nil {
+		return "", nil
+	}
+
+	var buffer bytes.Buffer
+	if err := html.Render(&buffer, sanitized); err != nil {
+		return "", err
+	}
+
+	markdown, err := htmltomarkdown.ConvertString(buffer.String())
+	if err != nil {
+		return "", err
+	}
+	markdown = strings.ReplaceAll(markdown, "\u00a0", " ")
+	markdown = strings.ReplaceAll(markdown, "\r\n", "\n")
+	markdown = strings.ReplaceAll(markdown, "\r", "\n")
+	for strings.Contains(markdown, "\n\n") {
+		markdown = strings.ReplaceAll(markdown, "\n\n", "\n")
+	}
+
+	return strings.TrimSpace(markdown), nil
+}
+
+func findBodyNode(node *html.Node) *html.Node {
+	if node == nil {
+		return nil
+	}
+	if node.Type == html.ElementNode && strings.EqualFold(node.Data, "body") {
+		return node
+	}
+	for child := node.FirstChild; child != nil; child = child.NextSibling {
+		if found := findBodyNode(child); found != nil {
+			return found
+		}
+	}
+	return nil
+}
+
+func cloneSanitizedHTML(node *html.Node) *html.Node {
+	if node == nil {
+		return nil
+	}
+
+	switch node.Type {
+	case html.DocumentNode:
+		clone := &html.Node{Type: html.DocumentNode}
+		appendSanitizedChildren(clone, node)
+		return clone
+	case html.ElementNode:
+		if isRemovedHTMLTag(node.Data) {
+			return nil
+		}
+		clone := &html.Node{
+			Type:      html.ElementNode,
+			Data:      node.Data,
+			DataAtom:  node.DataAtom,
+			Namespace: node.Namespace,
+			Attr:      filterAllowedHTMLAttributes(node.Attr),
+		}
+		appendSanitizedChildren(clone, node)
+		return clone
+	case html.TextNode:
+		return &html.Node{Type: html.TextNode, Data: node.Data}
+	default:
+		clone := &html.Node{Type: node.Type, Data: node.Data, DataAtom: node.DataAtom, Namespace: node.Namespace}
+		appendSanitizedChildren(clone, node)
+		return clone
+	}
+}
+
+func appendSanitizedChildren(parent *html.Node, node *html.Node) {
+	for child := node.FirstChild; child != nil; child = child.NextSibling {
+		clone := cloneSanitizedHTML(child)
+		if clone != nil {
+			parent.AppendChild(clone)
+		}
+	}
+}
+
+func isRemovedHTMLTag(tag string) bool {
+	return strings.EqualFold(tag, "script") || strings.EqualFold(tag, "style") || strings.EqualFold(tag, "link")
+}
+
+func filterAllowedHTMLAttributes(attributes []html.Attribute) []html.Attribute {
+	if len(attributes) == 0 {
+		return nil
+	}
+
+	filtered := make([]html.Attribute, 0, len(attributes))
+	for _, attribute := range attributes {
+		if isAllowedHTMLAttribute(attribute.Key) {
+			filtered = append(filtered, attribute)
+		}
+	}
+	if len(filtered) == 0 {
+		return nil
+	}
+	return filtered
+}
+
+func isAllowedHTMLAttribute(key string) bool {
+	return strings.EqualFold(key, "href") ||
+		strings.EqualFold(key, "src") ||
+		strings.EqualFold(key, "alt") ||
+		strings.EqualFold(key, "title")
 }
 
 func formatAddressList(addresses []*mailmessage.Address) string {

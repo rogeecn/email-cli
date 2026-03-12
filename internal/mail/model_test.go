@@ -136,7 +136,7 @@ func TestParseMessageAssignsSinglePartHTMLToHTMLBody(t *testing.T) {
 		"MIME-Version: 1.0",
 		"Content-Type: text/html; charset=UTF-8",
 		"",
-		"<div>Hello <strong>world</strong><br>Line&nbsp;2</div>",
+		"<div><a href=\"https://example.com\" class=\"link\">Hello <strong>world</strong></a><br><img src=\"https://example.com/image.png\" alt=\"hero\" title=\"Hero\" class=\"banner\">Line&nbsp;2</div>",
 	}, "\r\n")
 
 	detail, err := ParseMessage(888, nil, strings.NewReader(raw))
@@ -146,7 +146,19 @@ func TestParseMessageAssignsSinglePartHTMLToHTMLBody(t *testing.T) {
 	if detail.TextBody != "" {
 		t.Fatalf("TextBody = %q, want empty for single-part html", detail.TextBody)
 	}
-	if detail.HTMLBody != "<div>Hello <strong>world</strong><br>Line&nbsp;2</div>" {
+	if detail.HTMLBody != "<div><a href=\"https://example.com\" class=\"link\">Hello <strong>world</strong></a><br><img src=\"https://example.com/image.png\" alt=\"hero\" title=\"Hero\" class=\"banner\">Line&nbsp;2</div>" {
 		t.Fatalf("HTMLBody = %q", detail.HTMLBody)
+	}
+	if !strings.Contains(detail.MarkdownBody, "[Hello **world**](https://example.com)") {
+		t.Fatalf("MarkdownBody should preserve href, got %q", detail.MarkdownBody)
+	}
+	if !strings.Contains(detail.MarkdownBody, "![hero](https://example.com/image.png \"Hero\")") {
+		t.Fatalf("MarkdownBody should preserve image attributes, got %q", detail.MarkdownBody)
+	}
+	if strings.Contains(detail.MarkdownBody, "\n\n") {
+		t.Fatalf("MarkdownBody should collapse double newlines, got %q", detail.MarkdownBody)
+	}
+	if strings.Contains(detail.MarkdownBody, "class=") {
+		t.Fatalf("MarkdownBody should drop non-whitelisted attributes, got %q", detail.MarkdownBody)
 	}
 }

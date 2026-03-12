@@ -33,10 +33,11 @@ func sampleDetail() mail.Detail {
 			Subject: "Hello",
 			Seen:    true,
 		},
-		CC:       []string{"Carol <carol@example.com>"},
-		Flags:    []string{"\\Seen"},
-		TextBody: "Plain body",
-		HTMLBody: "<p>Plain body</p>",
+		CC:           []string{"Carol <carol@example.com>"},
+		Flags:        []string{"\\Seen"},
+		TextBody:     "Plain body",
+		HTMLBody:     "<p>Plain body</p>",
+		MarkdownBody: "Plain body",
 		Attachments: []mail.Attachment{
 			{Name: "report.pdf", ContentType: "application/pdf", Size: 1024},
 		},
@@ -54,7 +55,8 @@ func sampleHTMLOnlyDetail() mail.Detail {
 			Subject: "HTML Only",
 			Seen:    false,
 		},
-		HTMLBody: "<div>Hello <strong>world</strong><br>Line&nbsp;2</div>",
+		HTMLBody:     "<div>Hello <strong>world</strong><br>Line&nbsp;2</div>",
+		MarkdownBody: "Hello **world**\nLine 2",
 	}
 }
 
@@ -68,7 +70,8 @@ func sampleStyledHTMLDetail() mail.Detail {
 			Subject: "Styled HTML",
 			Seen:    false,
 		},
-		HTMLBody: "<html><head><style>body{font-size:14px;} p{margin:0;}</style></head><body><p>First</p><p></p><p>Second</p><script>console.log('debug')</script></body></html>",
+		HTMLBody:     "<html><head><style>body{font-size:14px;} p{margin:0;}</style></head><body><p>First</p><p></p><p>Second</p><script>console.log('debug')</script></body></html>",
+		MarkdownBody: "First\nSecond",
 	}
 }
 
@@ -148,8 +151,8 @@ func TestRenderDetailPlainConvertsHTMLBodyToText(t *testing.T) {
 	}
 
 	text := string(out)
-	if !strings.Contains(text, "Hello world") {
-		t.Fatalf("plain detail should include converted html text, got %q", text)
+	if !strings.Contains(text, "Hello **world**") {
+		t.Fatalf("plain detail should include markdown output, got %q", text)
 	}
 	if !strings.Contains(text, "Line 2") {
 		t.Fatalf("plain detail should preserve readable line content, got %q", text)
@@ -169,11 +172,15 @@ func TestRenderDetailPlainRemovesCSSScriptsAndCollapsesBlankLines(t *testing.T) 
 	if strings.Contains(text, "font-size") || strings.Contains(text, "console.log") {
 		t.Fatalf("plain detail should remove style and script content, got %q", text)
 	}
-	if !strings.Contains(text, "First\n\nSecond") {
-		t.Fatalf("plain detail should keep at most one blank line between paragraphs, got %q", text)
+	if !strings.Contains(text, "First\nSecond") {
+		t.Fatalf("plain detail should collapse repeated blank lines to single newlines, got %q", text)
 	}
-	if strings.Contains(text, "\n\n\n") {
-		t.Fatalf("plain detail should collapse repeated blank lines, got %q", text)
+	body := strings.SplitN(text, "Body:\n", 2)
+	if len(body) != 2 {
+		t.Fatalf("plain detail should include body section, got %q", text)
+	}
+	if strings.Contains(body[1], "\n\n") {
+		t.Fatalf("markdown body should not include double newlines, got %q", body[1])
 	}
 }
 
@@ -190,6 +197,9 @@ func TestRenderJSONAndYAML(t *testing.T) {
 	if detailJSON.Subject != "Hello" {
 		t.Fatalf("json subject = %q, want %q", detailJSON.Subject, "Hello")
 	}
+	if detailJSON.MarkdownBody == "" {
+		t.Fatalf("json markdown should be populated")
+	}
 
 	yamlOut, err := RenderDetail(sampleDetail(), "yaml", false)
 	if err != nil {
@@ -202,5 +212,8 @@ func TestRenderJSONAndYAML(t *testing.T) {
 	}
 	if detailYAML.Subject != "Hello" {
 		t.Fatalf("yaml subject = %q, want %q", detailYAML.Subject, "Hello")
+	}
+	if detailYAML.MarkdownBody == "" {
+		t.Fatalf("yaml markdown should be populated")
 	}
 }

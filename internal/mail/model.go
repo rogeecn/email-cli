@@ -17,12 +17,13 @@ type Attachment struct {
 }
 
 type Detail struct {
-	Summary     `json:",inline" yaml:",inline"`
-	CC          []string          `json:"cc,omitempty" yaml:"cc,omitempty"`
-	BCC         []string          `json:"bcc,omitempty" yaml:"bcc,omitempty"`
-	Flags       []string          `json:"flags,omitempty" yaml:"flags,omitempty"`
-	TextBody    string            `json:"text_body,omitempty" yaml:"text_body,omitempty"`
-	HTMLBody    string            `json:"html_body,omitempty" yaml:"html_body,omitempty"`
-	Attachments []Attachment      `json:"attachments,omitempty" yaml:"attachments,omitempty"`
-	Headers     map[string]string `json:"headers,omitempty" yaml:"headers,omitempty"`
+	Summary      `json:",inline" yaml:",inline"`
+	CC           []string          `json:"cc,omitempty" yaml:"cc,omitempty"`
+	BCC          []string          `json:"bcc,omitempty" yaml:"bcc,omitempty"`
+	Flags        []string          `json:"flags,omitempty" yaml:"flags,omitempty"`
+	TextBody     string            `json:"text_body,omitempty" yaml:"text_body,omitempty"`
+	HTMLBody     string            `json:"html_body,omitempty" yaml:"html_body,omitempty"`
+	MarkdownBody string            `json:"markdown,omitempty" yaml:"markdown,omitempty"`
+	Attachments  []Attachment      `json:"attachments,omitempty" yaml:"attachments,omitempty"`
+	Headers      map[string]string `json:"headers,omitempty" yaml:"headers,omitempty"`
 }
