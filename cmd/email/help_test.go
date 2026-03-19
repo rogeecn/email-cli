@@ -21,8 +21,11 @@ func TestFlagSetUsageIncludesExamplesAndConfigPath(t *testing.T) {
 	if !strings.Contains(text, "Examples:") {
 		t.Fatalf("usage should include examples section, got %q", text)
 	}
-	if !strings.Contains(text, cli.BinaryName+" -A personal --uid 12345") {
+	if !strings.Contains(text, cli.BinaryName+" -A personal -u 12345") {
 		t.Fatalf("usage should include detail example, got %q", text)
+	}
+	if !strings.Contains(text, "-u/--uid") {
+		t.Fatalf("usage should mention short and long uid flags, got %q", text)
 	}
 	if !strings.Contains(text, "--debug") {
 		t.Fatalf("usage should include debug flag, got %q", text)

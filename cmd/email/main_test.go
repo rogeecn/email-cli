@@ -43,6 +43,14 @@ func TestParseFlagsReadsAliasUIDConfigPathAndDebug(t *testing.T) {
 	if !options.Debug {
 		t.Fatalf("Debug = false, want true")
 	}
+
+	options, err = cli.ParseFlags([]string{"-u", "42"})
+	if err != nil {
+		t.Fatalf("parseFlags returned error for short uid alias: %v", err)
+	}
+	if options.UID != 42 {
+		t.Fatalf("UID from short alias = %d, want 42", options.UID)
+	}
 }
 
 func TestNewFlagSetSupportsShortAliasConfigAndDebugFlag(t *testing.T) {
@@ -52,6 +60,9 @@ func TestNewFlagSetSupportsShortAliasConfigAndDebugFlag(t *testing.T) {
 	}
 	if flagSet.Lookup("account") == nil {
 		t.Fatalf("--account flag should be registered")
+	}
+	if flagSet.Lookup("u") == nil {
+		t.Fatalf("short -u flag should be registered")
 	}
 	if flagSet.Lookup("c") == nil {
 		t.Fatalf("short -c flag should be registered")

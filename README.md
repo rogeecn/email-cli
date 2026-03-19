@@ -107,7 +107,7 @@ email-cli -c ./config.toml -A personal
 Show a single message by UID:
 
 ```bash
-email-cli -A personal --uid 12345
+email-cli -A personal -u 12345
 ```
 
 Render JSON:
@@ -150,7 +150,7 @@ Default behavior:
 ### Show message detail
 
 ```bash
-email --uid 12345
+email -u 12345
 email -A personal --uid 12345
 ```
 
