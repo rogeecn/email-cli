@@ -7,6 +7,7 @@ type Options struct {
 	Offset  int
 	Format  string
 	UID     uint32
+	ID      string // MailClaw string ID; never converted to an IMAP UID.
 }
 
 type AccountDefaults struct {

@@ -308,7 +308,7 @@ func (c wrappedClient) Login(username, password string) loginCommand {
 }
 
 func (c wrappedClient) Select(mailbox string) selectCommand {
-	return c.inner.Select(mailbox, nil)
+	return c.inner.Select(mailbox, &imapv2.SelectOptions{ReadOnly: true})
 }
 
 func uidSearchCriteria() *imapv2.SearchCriteria {
@@ -324,7 +324,7 @@ func (c wrappedClient) Fetch(uids []uint32, _ bool) fetchCommand {
 	for _, uid := range uids {
 		uidSet = append(uidSet, imapv2.UID(uid))
 	}
-	bodySection := &imapv2.FetchItemBodySection{}
+	bodySection := &imapv2.FetchItemBodySection{Peek: true}
 	return wrappedFetchCommand{inner: c.inner.Fetch(imapv2.UIDSetNum(uidSet...), &imapv2.FetchOptions{
 		UID:         true,
 		Flags:       true,

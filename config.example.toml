@@ -40,3 +40,14 @@ tls = true
 mailbox = "INBOX"
 page_size = 20
 format = "plain"
+
+# Reuse an existing MailClaw CLI config; no duplicate token or server deployment.
+[accounts.cloud]
+provider = "mailclaw"
+
+[accounts.cloud.mailclaw]
+config = "~/.mailclaw/config.json"
+
+[accounts.cloud.defaults]
+page_size = 20
+format = "json"

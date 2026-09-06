@@ -10,6 +10,8 @@ func Normalize(account config.AccountConfig) (config.AccountConfig, error) {
 	resolved := account
 
 	switch account.Provider {
+	case "mailclaw":
+		return resolved, nil // HTTP settings are loaded separately from the existing JSON config.
 	case "qq":
 		if resolved.IMAP.Host == "" {
 			resolved.IMAP.Host = "imap.qq.com"

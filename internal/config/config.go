@@ -18,6 +18,7 @@ type AccountConfig struct {
 	Provider string         `toml:"provider"`
 	Auth     AuthConfig     `toml:"auth"`
 	IMAP     IMAPConfig     `toml:"imap"`
+	MailClaw MailClawConfig `toml:"mailclaw"`
 	Defaults DefaultOptions `toml:"defaults"`
 }
 
