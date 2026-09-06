@@ -23,6 +23,12 @@ password = "secret"
 mailbox = "INBOX"
 page_size = 20
 format = "plain"
+
+[accounts.cloud]
+provider = "mailclaw"
+[accounts.cloud.mailclaw]
+host = "https://mail.example.com"
+api_token = "test-mailclaw-token"
 `
 
 	if err := os.WriteFile(configPath, []byte(content), 0o600); err != nil {
@@ -32,6 +38,11 @@ format = "plain"
 	cfg, err := LoadFile(configPath)
 	if err != nil {
 		t.Fatalf("LoadFile returned error: %v", err)
+	}
+
+	cloud := cfg.Accounts["cloud"]
+	if cloud.Provider != "mailclaw" || cloud.MailClaw.Host != "https://mail.example.com" || cloud.MailClaw.APIToken != "test-mailclaw-token" {
+		t.Fatal("MailClaw fields were not loaded directly from TOML")
 	}
 
 	if cfg.DefaultAccount != "personal" {

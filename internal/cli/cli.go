@@ -80,7 +80,7 @@ func NewFlagSet() (*flag.FlagSet, *Options) {
 		fmt.Fprintf(output, "  %s -A personal --offset 10 --limit 10\n", BinaryName)
 		fmt.Fprintf(output, "  %s -A personal --debug\n", BinaryName)
 		fmt.Fprintf(output, "  %s -A work --format json\n\n", BinaryName)
-		fmt.Fprintf(output, "MailClaw (reuses ~/.mailclaw/config.json):\n")
+		fmt.Fprintf(output, "MailClaw (host/api_token in the same TOML account config):\n")
 		fmt.Fprintf(output, "  %s mailclaw list --format json\n", BinaryName)
 		fmt.Fprintf(output, "  %s mailclaw --help\n\n", BinaryName)
 		fmt.Fprintf(output, "Config:\n")

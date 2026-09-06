@@ -41,12 +41,13 @@ mailbox = "INBOX"
 page_size = 20
 format = "plain"
 
-# Reuse an existing MailClaw CLI config; no duplicate token or server deployment.
+# MailClaw credentials are defined directly here; no extra configuration file.
 [accounts.cloud]
 provider = "mailclaw"
 
 [accounts.cloud.mailclaw]
-config = "~/.mailclaw/config.json"
+host = "https://mail.example.com"
+api_token = "your-mailclaw-api-token"
 
 [accounts.cloud.defaults]
 page_size = 20

@@ -103,15 +103,7 @@ func (a Application) Run(ctx context.Context, options Options) (Result, error) {
 			params = nil
 			result.Mode = ModeDetail
 		}
-		path, err := config.MailClawPath(account.MailClaw.Config)
-		if err != nil {
-			return Result{}, err
-		}
-		settings, err := config.ResolveMailClaw(path)
-		if err != nil {
-			return Result{}, err
-		}
-		client, err := mailclaw.New(settings.Host, settings.APIToken)
+		client, err := mailclaw.New(account.MailClaw.Host, account.MailClaw.APIToken)
 		if err != nil {
 			return Result{}, err
 		}

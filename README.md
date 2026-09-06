@@ -36,10 +36,24 @@ go install .
 
 `go run .` and the legacy `go run ./cmd/email` entry both work.
 
-## Existing MailClaw users: no migration required
+## MailClaw setup
 
-The default configuration is your existing `~/.mailclaw/config.json`, with `host` and `api_token` fields.
-The file and its credentials are not changed by read commands. No IMAP TOML file is needed for these commands.
+Define credentials directly in the same `~/.config/email-cli/config.toml` used for IMAP:
+
+```toml
+default_account = "cloud"
+
+[accounts.cloud]
+provider = "mailclaw"
+[accounts.cloud.mailclaw]
+host = "https://mail.example.com"
+api_token = "your-mailclaw-api-token"
+```
+
+No extra JSON file or file reference is used. If you previously used `mailclaw.config`, replace it
+with these two fields in your TOML account. The CLI does not read `~/.mailclaw/config.json` or `MAILCLAW_*`
+environment variables. Protect the TOML file with `chmod 600 ~/.config/email-cli/config.toml`.
+The following examples use a MailClaw default account; otherwise add `-A cloud` after the command.
 
 ```bash
 email-cli mailclaw list --format json
@@ -51,10 +65,10 @@ email-cli mailclaw --help
 
 Common flags go **after the command**, before or after IDs:
 
-- `--mailclaw-config /path/config.json`: select another existing JSON config.
-- `--format plain|json|yaml`: output format, default `plain`.
-- `-A, --account alias` and optional `-c, --config path`: use a MailClaw account from the email-cli TOML config instead.
-- An explicit JSON path and `--account` cannot be combined; `--config` means TOML, not MailClaw JSON.
+- `--format plain|json|yaml`: override the account's output format (fallback `plain`).
+- `-A, --account alias`: select a MailClaw account; otherwise use TOML `default_account`.
+- `-c, --config path`: select another email-cli TOML file; works with its default account or `-A`.
+- IMAP and MailClaw share this configuration/selection model. No separate MailClaw configuration commands or flags exist.
 
 ### Search and export
 
@@ -101,31 +115,9 @@ A destination is required. Remote filenames are never used as paths. Downloads s
 file in the destination directory and publish only on completion, without overwriting existing files or symlinks.
 The destination filesystem must support hard links. Interrupted/failed downloads do not publish partial destination files.
 
-### MailClaw configuration
+### Connection security
 
-```bash
-email-cli mailclaw config path
-email-cli mailclaw config show --format json   # host and token presence only, never the token
-```
-
-Overrides:
-
-1. Explicit `--mailclaw-config` or a TOML account's `mailclaw.config` selects the JSON path.
-2. Otherwise `MAILCLAW_CONFIG`, then `~/.mailclaw/config.json`.
-3. `MAILCLAW_HOST` **requires** `MAILCLAW_API_TOKEN` and overrides file credentials; it never reuses a saved token for a different host.
-4. `MAILCLAW_API_TOKEN` alone rotates the token for the configured host.
-
-To explicitly create/replace a config (not necessary for existing users), supply the token via the environment rather than a command-line argument:
-
-```bash
-read -rs -p 'MailClaw token: ' MAILCLAW_API_TOKEN; echo
-export MAILCLAW_API_TOKEN
-email-cli mailclaw config set --host https://mail.example.com
-unset MAILCLAW_API_TOKEN
-```
-
-`config set` atomically writes the selected JSON file with `0600` permissions and replaces its host/token.
-`config show` describes effective credentials after environment overrides, with only a boolean token indicator.
+Each selected account supplies both `mailclaw.host` and `mailclaw.api_token` directly. Neither field falls back to another file or environment token.
 HTTPS is required, except HTTP on loopback for local testing. Redirects are rejected, credentials are not logged,
 and each HTTP operation has a 60-second timeout. HTTP/API errors omit remote message bodies to avoid reflected secrets.
 
@@ -153,7 +145,8 @@ password = "your-imap-app-password"
 [accounts.cloud]
 provider = "mailclaw"
 [accounts.cloud.mailclaw]
-config = "~/.mailclaw/config.json" # optional; references existing credentials
+host = "https://mail.example.com"
+api_token = "your-mailclaw-api-token"
 [accounts.cloud.defaults]
 page_size = 20
 format = "json"
@@ -179,7 +172,7 @@ email-cli mailclaw attachments -A cloud 'email-string-id'
 ```
 
 Setting `default_account = "cloud"` also makes bare `email-cli` list MailClaw mail.
-The `mailclaw` command without `-A` always uses the standalone JSON configuration, not the TOML default account.
+The `mailclaw` command without `-A` uses the same TOML default account and rejects an IMAP default; select `-A cloud` in that case.
 MailClaw rejects `--uid` and `--mailbox`; IMAP rejects `--id` and all MailClaw-only commands.
 Root `--debug` continues to control IMAP receive diagnostics and detail headers; it does not log HTTP credentials.
 

@@ -11,24 +11,26 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/rogeecn/email-cli/internal/config"
 )
 
-func setupMailClaw(t *testing.T, handler http.HandlerFunc) {
+func setupMailClaw(t *testing.T, handler http.HandlerFunc) string {
 	t.Helper()
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
-	t.Setenv("MAILCLAW_HOST", "")
-	t.Setenv("MAILCLAW_API_TOKEN", "")
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("MAILCLAW_CONFIG", "")
-	if err := os.Mkdir(filepath.Join(home, ".mailclaw"), 0700); err != nil {
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	path := config.DefaultPath()
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		t.Fatal(err)
 	}
-	data, _ := json.Marshal(map[string]string{"host": server.URL, "api_token": "test-secret"})
-	if err := os.WriteFile(filepath.Join(home, ".mailclaw", "config.json"), data, 0600); err != nil {
+	content := fmt.Sprintf("default_account = \"cloud\"\n[accounts.cloud]\nprovider = \"mailclaw\"\n[accounts.cloud.mailclaw]\nhost = %q\napi_token = \"test-secret\"\n", server.URL)
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
 		t.Fatal(err)
 	}
+	return server.URL
 }
 
 func invokeMailClaw(args ...string) (int, string, string) {
@@ -37,7 +39,7 @@ func invokeMailClaw(args ...string) (int, string, string) {
 	return code, out.String(), err.String()
 }
 
-func TestMailClawReusesExistingConfigAndRoutes(t *testing.T) {
+func TestMailClawTOMLConfigAndRoutes(t *testing.T) {
 	var method, path, query string
 	setupMailClaw(t, func(w http.ResponseWriter, r *http.Request) {
 		method, path, query = r.Method, r.URL.Path, r.URL.RawQuery
@@ -107,6 +109,7 @@ func TestMailClawInvalidCommandsNeverReachServer(t *testing.T) {
 		{"send", "--from", "a@example.com", "--to", "b@example.com", "--subject", "test"},
 		{"send", "--from", "a@example.com", "--to", "b@example.com", "--subject", "bad\nheader", "--text", "hi"},
 		{"list", "--config", "/tmp/unused.toml"}, {"unknown"},
+		{"list", "--mailclaw-config", "legacy.json"}, {"config", "path"}, {"config", "show"}, {"config", "set"},
 	} {
 		code, _, stderr := invokeMailClaw(args...)
 		if code == 0 || stderr == "" {
@@ -151,22 +154,20 @@ func TestMailClawExportAndDownload(t *testing.T) {
 
 func TestMailClawNamedAccountsAndDefaultRootRouting(t *testing.T) {
 	var lastPath string
-	setupMailClaw(t, func(w http.ResponseWriter, r *http.Request) {
+	host := setupMailClaw(t, func(w http.ResponseWriter, r *http.Request) {
 		lastPath = r.URL.Path
 		fmt.Fprint(w, `{"success":true,"data":{"emails":[],"id":"string-id","total":0}}`)
 	})
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
-	jsonPath := filepath.Join(dir, "mailclaw.json")
-	if err := os.Rename(filepath.Join(os.Getenv("HOME"), ".mailclaw", "config.json"), jsonPath); err != nil {
-		t.Fatal(err)
-	}
-	content := fmt.Sprintf("default_account = \"cloud\"\n[accounts.cloud]\nprovider = \"mailclaw\"\n[accounts.cloud.mailclaw]\nconfig = %q\n[accounts.cloud.defaults]\nformat = \"json\"\npage_size = 5\n[accounts.imap]\nprovider = \"gmail\"\n", jsonPath)
+	content := fmt.Sprintf("default_account = \"cloud\"\n[accounts.cloud]\nprovider = \"mailclaw\"\n[accounts.cloud.mailclaw]\nhost = %q\napi_token = \"test-secret\"\n[accounts.cloud.defaults]\nformat = \"json\"\npage_size = 5\n[accounts.imap]\nprovider = \"gmail\"\n", host)
 	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if code, out, stderr := invokeMailClaw("list", "-c", path, "-A", "cloud"); code != 0 || !json.Valid([]byte(out)) {
-		t.Fatalf("named account: %s %s", out, stderr)
+	for _, args := range [][]string{{"list", "-c", path, "-A", "cloud"}, {"list", "-c", path}} {
+		if code, out, stderr := invokeMailClaw(args...); code != 0 || !json.Valid([]byte(out)) {
+			t.Fatalf("TOML account %v: %s %s", args, out, stderr)
+		}
 	}
 	for _, args := range [][]string{{"-c", path}, {"-c", path, "-A", "cloud", "--id", "string-id"}} {
 		var out, stderr bytes.Buffer
@@ -191,9 +192,10 @@ func TestMailClawNamedAccountsAndDefaultRootRouting(t *testing.T) {
 	}
 }
 
-func TestMailClawConfigHelpAndRunDispatch(t *testing.T) {
-	setupMailClaw(t, func(w http.ResponseWriter, r *http.Request) { t.Error("config/help must not access API") })
-	for _, args := range [][]string{{"--help"}, {"send", "--help"}, {"config", "path"}, {"config", "show", "--format", "json"}} {
+func TestMailClawHelpAndRunDispatch(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	for _, args := range [][]string{{"--help"}, {"send", "--help"}} {
 		code, out, stderr := invokeMailClaw(args...)
 		if code != 0 || out+stderr == "" || strings.Contains(out+stderr, "test-secret") {
 			t.Fatalf("%v: %d %s %s", args, code, out, stderr)
@@ -205,19 +207,9 @@ func TestMailClawConfigHelpAndRunDispatch(t *testing.T) {
 	}
 }
 
-func TestMailClawConfigSetAndUTF8Bodies(t *testing.T) {
-	setupMailClaw(t, func(w http.ResponseWriter, r *http.Request) { t.Error("invalid body/config must not access API") })
+func TestMailClawUTF8Bodies(t *testing.T) {
+	setupMailClaw(t, func(w http.ResponseWriter, r *http.Request) { t.Error("invalid body must not access API") })
 	dir := t.TempDir()
-	path := filepath.Join(dir, "new-config.json")
-	t.Setenv("MAILCLAW_API_TOKEN", "replacement-secret")
-	code, out, stderr := invokeMailClaw("config", "set", "--mailclaw-config", path, "--host", "https://example.com", "--format", "json")
-	if code != 0 || strings.Contains(out+stderr, "replacement-secret") {
-		t.Fatalf("config set: %d %s %s", code, out, stderr)
-	}
-	data, err := os.ReadFile(path)
-	if err != nil || !strings.Contains(string(data), "replacement-secret") {
-		t.Fatal("config set did not save token")
-	}
 	file := filepath.Join(dir, "body.txt")
 	if err := os.WriteFile(file, []byte{0xff}, 0600); err != nil {
 		t.Fatal(err)
@@ -234,6 +226,40 @@ func TestMailClawConfigSetAndUTF8Bodies(t *testing.T) {
 		args := append(append([]string{}, base...), body...)
 		if code, _, stderr := invokeMailClaw(args...); code == 0 {
 			t.Fatalf("accepted %v: %s", body, stderr)
+		}
+	}
+}
+
+func TestMailClawRequiresInlineCredentials(t *testing.T) {
+	host := setupMailClaw(t, func(w http.ResponseWriter, r *http.Request) { t.Error("must not fall back to legacy credentials") })
+	legacy := filepath.Join(os.Getenv("HOME"), ".mailclaw", "config.json")
+	if err := os.MkdirAll(filepath.Dir(legacy), 0700); err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(map[string]string{"host": host, "api_token": "test-secret"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(legacy, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("MAILCLAW_CONFIG", legacy)
+	t.Setenv("MAILCLAW_HOST", host)
+	t.Setenv("MAILCLAW_API_TOKEN", "test-secret")
+	for _, fields := range []string{
+		fmt.Sprintf("host = %q", host),
+		"api_token = \"test-secret\"",
+		fmt.Sprintf("config = %q", legacy),
+	} {
+		content := "default_account = \"cloud\"\n[accounts.cloud]\nprovider = \"mailclaw\"\n[accounts.cloud.mailclaw]\n" + fields
+		if err := os.WriteFile(config.DefaultPath(), []byte(content), 0600); err != nil {
+			t.Fatal(err)
+		}
+		for _, args := range [][]string{{"mailclaw", "list"}, {"--id", "string-id"}} {
+			var out, stderr bytes.Buffer
+			if code := Main(args, &out, &stderr); code == 0 || strings.Contains(out.String()+stderr.String(), "test-secret") {
+				t.Fatalf("missing inline credentials: code=%d out=%s err=%s", code, &out, &stderr)
+			}
 		}
 	}
 }

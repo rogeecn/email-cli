@@ -73,13 +73,10 @@ Commands:
   attachments <id>              List attachment metadata
   download <id> <attachment-id> --output <path>
   health                       Check the API
-  config path|show              Locate configuration / show host and token presence
-  config set --host <url>       Save host and MAILCLAW_API_TOKEN (never echoes token)
 
 Common flags (after command, before or after IDs):
-  --mailclaw-config <path>      Existing MailClaw JSON config (~/.mailclaw/config.json)
-  -A, --account <alias>         MailClaw account from email-cli TOML config
-  -c, --config <path>           TOML path (requires --account)
+  -A, --account <alias>         MailClaw TOML account (defaults to default_account)
+  -c, --config <path>           email-cli TOML configuration path
   --format plain|json|yaml      Output format (plain is readable key/value text)
 
 list/export: --from --to --q --after --before --limit (1..100) --offset (>=0)
@@ -87,7 +84,7 @@ Dates: Unix seconds, YYYY-MM-DD, or RFC3339. Filters use inclusive bounds.
 export: --output <path> writes one page without overwriting an existing file.
 send: repeat --to/--cc/--bcc/--reply-to; --text-file/--html-file for UTF-8 bodies.
       --header key=value, --tag name=value, --scheduled-at <RFC3339> are optional.
-Environment: MAILCLAW_CONFIG; MAILCLAW_HOST + MAILCLAW_API_TOKEN (must be paired).
+Configure host and api_token directly in [accounts.<alias>.mailclaw] in TOML.
 No configuration or production mail is changed by read commands.
 `, BinaryName)
 }
@@ -110,17 +107,10 @@ func runMailClaw(ctx context.Context, args []string, stdout, stderr io.Writer) i
 func executeMailClaw(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	command := args[0]
 	args = args[1:]
-	if command == "config" {
-		if len(args) == 0 {
-			return errors.New("mailclaw config requires path, show, or set")
-		}
-		command += " " + args[0]
-		args = args[1:]
-	}
 	fs := flag.NewFlagSet("mailclaw "+command, flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() { mailClawHelp(stderr); fs.PrintDefaults() }
-	var account, tomlPath, jsonPath, format, from, toFilter, query, after, before, destination, host string
+	var account, tomlPath, format, from, toFilter, query, after, before, destination string
 	var subject, text, html, textFile, htmlFile, scheduled string
 	var recipients, cc, bcc, replyTo, headers, tags stringList
 	var limit, offset int
@@ -129,7 +119,6 @@ func executeMailClaw(ctx context.Context, args []string, stdout, stderr io.Write
 	fs.StringVar(&account, "A", "", "TOML account alias")
 	fs.StringVar(&tomlPath, "config", "", "TOML configuration path")
 	fs.StringVar(&tomlPath, "c", "", "TOML configuration path")
-	fs.StringVar(&jsonPath, "mailclaw-config", "", "MailClaw JSON configuration path")
 	fs.StringVar(&format, "format", "", "plain, json, or yaml")
 	arity := 0
 	switch command {
@@ -168,9 +157,7 @@ func executeMailClaw(ctx context.Context, args []string, stdout, stderr io.Write
 		fs.Var(&headers, "header", "header key=value (repeatable)")
 		fs.Var(&tags, "tag", "tag name=value (repeatable)")
 		fs.StringVar(&scheduled, "scheduled-at", "", "scheduled send time (RFC3339)")
-	case "config set":
-		fs.StringVar(&host, "host", "", "HTTPS API base URL")
-	case "health", "config path", "config show":
+	case "health":
 	default:
 		return fmt.Errorf("unknown MailClaw command %q; use email-cli mailclaw --help", command)
 	}
@@ -182,67 +169,31 @@ func executeMailClaw(ctx context.Context, args []string, stdout, stderr io.Write
 	if fs.NArg() != arity {
 		return fmt.Errorf("mailclaw %s requires %d positional ID(s)", command, arity)
 	}
-	if account != "" && jsonPath != "" {
-		return errors.New("choose --account or --mailclaw-config, not both")
+	if tomlPath == "" {
+		tomlPath = config.DefaultPath()
 	}
-	if tomlPath != "" && account == "" {
-		return errors.New("--config requires --account; use --mailclaw-config for JSON")
+	cfg, err := config.LoadFile(tomlPath)
+	if err != nil {
+		return err
 	}
-	if account != "" {
-		if tomlPath == "" {
-			tomlPath = config.DefaultPath()
-		}
-		cfg, err := config.LoadFile(tomlPath)
-		if err != nil {
-			return err
-		}
-		_, selected, err := config.ResolveAccount(cfg, account)
-		if err != nil {
-			return err
-		}
-		if selected.Provider != "mailclaw" {
-			return errors.New("mailclaw commands require a provider = \"mailclaw\" account; IMAP remains read-only")
-		}
-		jsonPath = selected.MailClaw.Config
-		if format == "" {
-			format = selected.Defaults.Format
-		}
-		if !explicitLimit {
-			limit = selected.Defaults.PageSize
-		}
+	_, selected, err := config.ResolveAccount(cfg, account)
+	if err != nil {
+		return err
+	}
+	if selected.Provider != "mailclaw" {
+		return errors.New("mailclaw commands require a provider = \"mailclaw\" account; select one with --account")
+	}
+	if format == "" {
+		format = selected.Defaults.Format
+	}
+	if !explicitLimit {
+		limit = selected.Defaults.PageSize
 	}
 	if format == "" {
 		format = "plain"
 	}
 	if _, err := output.RenderAPI(json.RawMessage(`{}`), format); err != nil {
 		return err
-	}
-	path, err := config.MailClawPath(jsonPath)
-	if err != nil {
-		return err
-	}
-	if command == "config path" {
-		return writeAPI(stdout, map[string]string{"path": path}, format)
-	}
-	if command == "config show" || command == "config set" {
-		var settings config.MailClawSettings
-		if command == "config show" {
-			settings, err = config.ResolveMailClaw(path)
-		} else {
-			settings = config.MailClawSettings{Host: host, APIToken: os.Getenv("MAILCLAW_API_TOKEN")}
-		}
-		if err != nil {
-			return err
-		}
-		if _, err := mailclaw.New(settings.Host, settings.APIToken); err != nil {
-			return err
-		}
-		if command == "config set" {
-			if err := config.SaveMailClaw(path, settings); err != nil {
-				return err
-			}
-		}
-		return writeAPI(stdout, map[string]any{"path": path, "host": settings.Host, "api_token_configured": true}, format)
 	}
 	method, endpoint := http.MethodGet, "/api/emails"
 	params := url.Values{}
@@ -365,11 +316,7 @@ func executeMailClaw(ctx context.Context, args []string, stdout, stderr io.Write
 	case "health":
 		endpoint = "/api/health"
 	}
-	settings, err := config.ResolveMailClaw(path)
-	if err != nil {
-		return err
-	}
-	client, err := mailclaw.New(settings.Host, settings.APIToken)
+	client, err := mailclaw.New(selected.MailClaw.Host, selected.MailClaw.APIToken)
 	if err != nil {
 		return err
 	}

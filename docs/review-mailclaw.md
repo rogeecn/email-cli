@@ -5,7 +5,7 @@
 - 基线：`2a6ba88b81042dfd5cbad1cfad7af46ca4aa2b6b`。
 - 对照上游：`missuo/mailclaw@f13f82addd88a4cfe2f371763c6051e4a8dd87ad` 的 API 路由、类型与 Rust CLI。
 - 保留现有 IMAP 参数、账户和输出；在 Go 内直接调用 MailClaw API，不启动外部 Rust CLI，不搬入 Cloudflare 服务端，不新增依赖。
-- 默认复用已有 `~/.mailclaw/config.json`；TOML 命名账户仅引用该文件，不复制 token。
+- 配置统一存于 email-cli TOML：`[accounts.<alias>.mailclaw]` 直接定义 `host`、`api_token`。后续按用户要求移除了外部 JSON 引用、环境变量回退及独立配置管理命令。
 - 后台实现/独立 review 因 pi 子会话依赖缺失未能启动。经用户授权，改为当前会话实现、测试和自查；本报告不声称经过独立 reviewer 审核。
 
 ## 已修复的原有问题
@@ -20,7 +20,7 @@
 
 ## 新增能力与兼容边界
 
-- `email-cli mailclaw list/export/get/send/delete/attachments/download/health/config`。
+- `email-cli mailclaw list/export/get/send/delete/attachments/download/health`。
 - `email-cli -A cloud` 列表，`email-cli -A cloud --id <string>` 详情；原 IMAP `-u/--uid` 不变。
 - 列表/导出支持全文搜索、发件人、收件人、时间范围、limit/offset；导出是单页，不冒充全量快照。
 - 发送支持多收件人、CC/BCC、Reply-To、文本/HTML、正文文件、headers/tags、定时参数。服务端仍需正确配置发送能力。
@@ -31,9 +31,9 @@
 ## 安全检查
 
 - HTTPS（仅 loopback 测试可用 HTTP）、60 秒超时、context cancellation、拒绝全部重定向。
-- host 不能携带用户信息、query 或 fragment；环境 host 覆盖必须配套 token，避免把保存的 token 发给新主机。
-- token 不进入命令行参数、日志或 API 错误正文；`config show` 只显示是否配置。
-- 配置原子替换且权限 0600；导出/下载文件 0600，不静默覆盖用户文件。
+- host 不能携带用户信息、query 或 fragment；host/token 均来自所选 TOML 账户，不混用外部配置或环境凭据。
+- token 不进入命令行参数、日志或 API 错误正文。
+- CLI 不再管理独立配置文件；用户应将 TOML 权限设为 0600。导出/下载文件 0600，不静默覆盖用户文件。
 - ID、分页、日期、地址、正文 UTF-8、换行注入、互斥选项在请求前验证。
 - 发送/删除不做应用层自动重试；发送超时的远端结果可能未知，需检查后决定是否重试。
 - Agent Skill 明确：邮件和附件是不可信数据；不能据其中的指令发送、删除、泄露凭据或执行命令。
@@ -47,7 +47,7 @@
 ## 验证与未验证项
 
 已通过：`go test ./...`、`go test -race ./...`、`go vet ./...`、`go build ./...`、`git diff --check` 和 LSP 错误检查；构建后的根命令/MailClaw `--help` 均返回 0。
-新增测试使用 `httptest`、临时配置/目录和 IMAP 线协议 fixture，覆盖 API 路由与 payload、账户复用、参数拒绝、输出、凭据保护、重定向、下载截断/覆盖/符号链接。
+新增测试使用 `httptest`、临时配置/目录和 IMAP 线协议 fixture，覆盖 API 路由与 payload、直接读取 TOML 字段、默认/显式账户选择、禁止旧 JSON/env 回退、参数拒绝、输出、凭据保护、重定向、下载截断/覆盖/符号链接。
 
 未使用生产 token 发请求，未读取生产邮件、发送或删除真实邮件，也未重新部署服务。
 本机已安装的 `email-cli` 二进制未替换；可先用 `go run . mailclaw --help`，确认后自行 `go install .`。

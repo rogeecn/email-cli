@@ -11,13 +11,13 @@ If a command is missing, report the version/install mismatch; do not automatical
 
 ## Configuration and backend selection
 
-- IMAP: `~/.config/email-cli/config.toml` (or `$XDG_CONFIG_HOME/email-cli/config.toml`).
-- MailClaw: existing `~/.mailclaw/config.json`; no migration required.
-- `email-cli mailclaw config path` shows the path; `config show --format json` shows only host/token presence.
+- Both backends: `~/.config/email-cli/config.toml` (or `$XDG_CONFIG_HOME/email-cli/config.toml`).
+- MailClaw credentials are the `host` and `api_token` fields in `[accounts.<alias>.mailclaw]`.
+- No external JSON file, `mailclaw.config` reference, `MAILCLAW_*` environment fallback, or MailClaw `config` command is used.
 - Never print/read raw config files to expose passwords/tokens. Do not put tokens in command arguments or logs.
-- Standalone MailClaw: `email-cli mailclaw <command>`; common flags follow the command.
-- TOML accounts: `-A alias` (`provider = "mailclaw"` or an IMAP provider). `-c path` selects TOML and requires `-A` for MailClaw subcommands.
-- `--mailclaw-config path` selects a MailClaw JSON file instead of a TOML account.
+- MailClaw: `email-cli mailclaw <command>`; common flags follow the command.
+- TOML accounts: `-A alias` (`provider = "mailclaw"` or an IMAP provider); without it, both entry points use `default_account`. `-c path` selects another TOML file.
+- MailClaw subcommands require a MailClaw account; add `-A cloud` when the default is IMAP. Do not silently fall back to another account.
 - Ask the user when the intended account is unclear. Do not change credentials or default accounts without authorization.
 
 ## Reads
