@@ -20,8 +20,8 @@
 
 ## 新增能力与兼容边界
 
-- `email-cli mailclaw list/export/get/send/delete/attachments/download/health`。
-- `email-cli -A cloud` 列表，`email-cli -A cloud --id <string>` 详情；原 IMAP `-u/--uid` 不变。
+- 根命令统一为 `email-cli list/get/export/send/delete/attachments/download/health -A <account>`；`-A` 或 `default_account` 决定后端，不再保留 `mailclaw` 前缀。
+- `list/get` 同时支持 IMAP 与 MailClaw；`get` 按账户类型解释 IMAP 数字 UID 或 MailClaw 字符串 ID。原无子命令的 IMAP `-u/--uid` 与 MailClaw `--id` 写法继续兼容。
 - 列表/导出支持全文搜索、发件人、收件人、时间范围、limit/offset；导出是单页，不冒充全量快照。
 - 发送支持多收件人、CC/BCC、Reply-To、文本/HTML、正文文件、headers/tags、定时参数。服务端仍需正确配置发送能力。
 - 删除要求 `--yes`；IMAP 账户不能通过 MailClaw 命令发送或删除。
@@ -50,5 +50,5 @@
 新增测试使用 `httptest`、临时配置/目录和 IMAP 线协议 fixture，覆盖 API 路由与 payload、直接读取 TOML 字段、默认/显式账户选择、禁止旧 JSON/env 回退、参数拒绝、输出、凭据保护、重定向、下载截断/覆盖/符号链接。
 
 未使用生产 token 发请求，未读取生产邮件、发送或删除真实邮件，也未重新部署服务。
-本机已安装的 `email-cli` 二进制未替换；可先用 `go run . mailclaw --help`，确认后自行 `go install .`。
+本机已安装的 `email-cli` 二进制未替换；可先用 `go run . --help`，确认后自行 `go install .`。
 附件发布要求目标文件系统支持 hard link；导出不是并发收件期间的稳定快照；未验证真实 Cloudflare/Resend 服务配置。

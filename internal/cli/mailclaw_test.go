@@ -12,8 +12,22 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/rogeecn/email-cli/internal/app"
 	"github.com/rogeecn/email-cli/internal/config"
 )
+
+type recordingRunner struct {
+	options app.Options
+}
+
+func (r *recordingRunner) Run(_ context.Context, options app.Options) (app.Result, error) {
+	r.options = options
+	mode := app.ModeList
+	if options.UID != 0 {
+		mode = app.ModeDetail
+	}
+	return app.Result{Mode: mode, Format: "json"}, nil
+}
 
 func setupMailClaw(t *testing.T, handler http.HandlerFunc) string {
 	t.Helper()
@@ -35,7 +49,7 @@ func setupMailClaw(t *testing.T, handler http.HandlerFunc) string {
 
 func invokeMailClaw(args ...string) (int, string, string) {
 	var out, err bytes.Buffer
-	code := Main(append([]string{"mailclaw"}, args...), &out, &err)
+	code := Main(args, &out, &err)
 	return code, out.String(), err.String()
 }
 
@@ -202,8 +216,13 @@ func TestMailClawHelpAndRunDispatch(t *testing.T) {
 		}
 	}
 	var out, stderr bytes.Buffer
-	if code := Run(context.Background(), []string{"mailclaw", "--help"}, &out, &stderr, nil); code != 0 || !strings.Contains(out.String(), "download") {
+	if code := Run(context.Background(), []string{"send", "--help"}, &out, &stderr, nil); code != 0 || !strings.Contains(stderr.String(), "download") {
 		t.Fatalf("Run dispatch %d %s", code, &stderr)
+	}
+	out.Reset()
+	stderr.Reset()
+	if code := Main([]string{"mailclaw", "list"}, &out, &stderr); code == 0 || !strings.Contains(stderr.String(), "prefix was removed") {
+		t.Fatalf("legacy prefix accepted: %d %s", code, &stderr)
 	}
 }
 
@@ -264,12 +283,43 @@ func TestMailClawRequiresInlineCredentials(t *testing.T) {
 	}
 }
 
+func TestUnifiedCommandsDispatchIMAPByAccount(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	content := "default_account = \"imap\"\n[accounts.imap]\nprovider = \"selfhost\"\n"
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+		t.Fatal(err)
+	}
+	runner := &recordingRunner{}
+	factory := func() Runner { return runner }
+	for _, tc := range []struct {
+		args []string
+		uid  uint32
+	}{
+		{[]string{"list", "-c", path, "-A", "imap", "--limit", "5", "--mailbox", "Archive"}, 0},
+		{[]string{"get", "4294967295", "-c", path, "-A", "imap"}, 4294967295},
+	} {
+		var out, stderr bytes.Buffer
+		if code := Run(context.Background(), tc.args, &out, &stderr, factory); code != 0 {
+			t.Fatalf("%v: %d %s", tc.args, code, &stderr)
+		}
+		if runner.options.UID != tc.uid || runner.options.Account != "imap" {
+			t.Fatalf("wrong dispatch for %v: %#v", tc.args, runner.options)
+		}
+	}
+	for _, args := range [][]string{{"get", "not-a-uid", "-c", path}, {"send", "-c", path}} {
+		var out, stderr bytes.Buffer
+		if code := Run(context.Background(), args, &out, &stderr, factory); code == 0 {
+			t.Fatalf("unsupported IMAP command accepted: %v", args)
+		}
+	}
+}
+
 func TestRootHelpSucceedsWithoutConfig(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	for _, help := range []string{"--help", "-h"} {
 		var out, stderr bytes.Buffer
-		if code := Main([]string{help}, &out, &stderr); code != 0 || !strings.Contains(out.String()+stderr.String(), "mailclaw") {
+		if code := Main([]string{help}, &out, &stderr); code != 0 || !strings.Contains(out.String()+stderr.String(), "MailClaw") {
 			t.Fatalf("help: code=%d out=%s err=%s", code, &out, &stderr)
 		}
 		out.Reset()

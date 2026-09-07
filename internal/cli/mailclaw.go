@@ -16,7 +16,9 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/rogeecn/email-cli/internal/app"
 	"github.com/rogeecn/email-cli/internal/config"
+	imapservice "github.com/rogeecn/email-cli/internal/imap"
 	"github.com/rogeecn/email-cli/internal/mailclaw"
 	"github.com/rogeecn/email-cli/internal/output"
 )
@@ -61,21 +63,21 @@ func parseCommandFlags(fs *flag.FlagSet, args []string) error {
 	return fs.Parse(append(append(flags, "--"), positional...))
 }
 
-func mailClawHelp(w io.Writer) {
-	fmt.Fprintf(w, `Usage: %s mailclaw <command> [flags]
+func commandHelp(w io.Writer) {
+	fmt.Fprintf(w, `Usage: %s <command> [flags]
 
 Commands:
-  list                         List metadata (one page)
-  export                       Export full content (one page)
-  get <id>                     Read an email by string ID
+  list                         List messages from the selected account
+  get <id>                     Read by IMAP UID or MailClaw string ID
+  export                       Export MailClaw full content (one page)
   send                         Send email (--from, --to, --subject, --text/--html)
   delete <id> --yes             Permanently delete an email and its attachments
   attachments <id>              List attachment metadata
   download <id> <attachment-id> --output <path>
-  health                       Check the API
+  health                       Check the MailClaw API
 
 Common flags (after command, before or after IDs):
-  -A, --account <alias>         MailClaw TOML account (defaults to default_account)
+  -A, --account <alias>         TOML account (defaults to default_account)
   -c, --config <path>           email-cli TOML configuration path
   --format plain|json|yaml      Output format (plain is readable key/value text)
 
@@ -89,40 +91,27 @@ No configuration or production mail is changed by read commands.
 `, BinaryName)
 }
 
-func runMailClaw(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
-		mailClawHelp(stdout)
-		return 0
-	}
-	if err := executeMailClaw(ctx, args, stdout, stderr); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return 0
-		}
-		fmt.Fprintln(stderr, err)
-		return 1
-	}
-	return 0
-}
-
-func executeMailClaw(ctx context.Context, args []string, stdout, stderr io.Writer) error {
+func executeMailClaw(ctx context.Context, args []string, stdout, stderr io.Writer, factory RunnerFactory) error {
 	command := args[0]
 	args = args[1:]
-	fs := flag.NewFlagSet("mailclaw "+command, flag.ContinueOnError)
+	fs := flag.NewFlagSet(command, flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	fs.Usage = func() { mailClawHelp(stderr); fs.PrintDefaults() }
-	var account, tomlPath, format, from, toFilter, query, after, before, destination string
+	fs.Usage = func() { commandHelp(stderr); fs.PrintDefaults() }
+	var account, tomlPath, format, mailbox, from, toFilter, query, after, before, destination string
 	var subject, text, html, textFile, htmlFile, scheduled string
 	var recipients, cc, bcc, replyTo, headers, tags stringList
 	var limit, offset int
-	var yes bool
+	var yes, debug bool
 	fs.StringVar(&account, "account", "", "TOML account alias")
 	fs.StringVar(&account, "A", "", "TOML account alias")
 	fs.StringVar(&tomlPath, "config", "", "TOML configuration path")
 	fs.StringVar(&tomlPath, "c", "", "TOML configuration path")
 	fs.StringVar(&format, "format", "", "plain, json, or yaml")
+	fs.BoolVar(&debug, "debug", false, "print IMAP receive debug logs to stderr")
 	arity := 0
 	switch command {
 	case "list", "export":
+		fs.StringVar(&mailbox, "mailbox", "", "IMAP mailbox name")
 		fs.StringVar(&from, "from", "", "sender filter")
 		fs.StringVar(&toFilter, "to", "", "recipient filter")
 		fs.StringVar(&query, "q", "", "full-text search")
@@ -136,6 +125,9 @@ func executeMailClaw(ctx context.Context, args []string, stdout, stderr io.Write
 		}
 	case "get", "attachments":
 		arity = 1
+		if command == "get" {
+			fs.StringVar(&mailbox, "mailbox", "", "IMAP mailbox name")
+		}
 	case "delete":
 		arity = 1
 		fs.BoolVar(&yes, "yes", false, "confirm permanent deletion")
@@ -159,15 +151,21 @@ func executeMailClaw(ctx context.Context, args []string, stdout, stderr io.Write
 		fs.StringVar(&scheduled, "scheduled-at", "", "scheduled send time (RFC3339)")
 	case "health":
 	default:
-		return fmt.Errorf("unknown MailClaw command %q; use email-cli mailclaw --help", command)
+		return fmt.Errorf("unknown command %q; use email-cli --help", command)
 	}
 	if err := parseCommandFlags(fs, args); err != nil {
 		return err
 	}
 	explicitLimit := false
 	fs.Visit(func(f *flag.Flag) { explicitLimit = explicitLimit || f.Name == "limit" })
+	if explicitLimit && limit < 1 {
+		return errors.New("--limit must be positive")
+	}
+	if offset < 0 {
+		return errors.New("--offset must be non-negative")
+	}
 	if fs.NArg() != arity {
-		return fmt.Errorf("mailclaw %s requires %d positional ID(s)", command, arity)
+		return fmt.Errorf("%s requires %d positional ID(s)", command, arity)
 	}
 	if tomlPath == "" {
 		tomlPath = config.DefaultPath()
@@ -181,7 +179,38 @@ func executeMailClaw(ctx context.Context, args []string, stdout, stderr io.Write
 		return err
 	}
 	if selected.Provider != "mailclaw" {
-		return errors.New("mailclaw commands require a provider = \"mailclaw\" account; select one with --account")
+		if command != "list" && command != "get" {
+			return fmt.Errorf("%s is not supported by %s accounts", command, selected.Provider)
+		}
+		if from != "" || toFilter != "" || query != "" || after != "" || before != "" {
+			return errors.New("search filters are only supported by MailClaw accounts")
+		}
+		var uid uint32
+		if command == "get" {
+			value, err := strconv.ParseUint(fs.Arg(0), 10, 32)
+			if err != nil || value == 0 {
+				return errors.New("IMAP message ID must be a UID between 1 and 4294967295")
+			}
+			uid = uint32(value)
+		}
+		var runner Runner
+		if factory != nil {
+			runner = factory()
+		} else {
+			runtime := imapservice.NewDefaultRuntimeClient()
+			if debug {
+				runtime = runtime.WithDebugOutput(stderr)
+			}
+			runner = app.New(fileLoader{path: tomlPath}, runtime)
+		}
+		result, err := runner.Run(ctx, app.Options{Account: account, Mailbox: mailbox, Limit: limit, Offset: offset, Format: format, UID: uid})
+		if err != nil {
+			return err
+		}
+		return renderResult(stdout, result, debug)
+	}
+	if mailbox != "" {
+		return errors.New("--mailbox is only supported by IMAP accounts")
 	}
 	if format == "" {
 		format = selected.Defaults.Format

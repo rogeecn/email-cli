@@ -67,7 +67,7 @@ func NewFlagSet() (*flag.FlagSet, *Options) {
 	flagSet.Usage = func() {
 		output := flagSet.Output()
 		fmt.Fprintf(output, "Fetch email from IMAP accounts or MailClaw accounts.\n\n")
-		fmt.Fprintf(output, "Usage:\n  %s [flags]\n\n", BinaryName)
+		fmt.Fprintf(output, "Usage:\n  %s [flags]\n  %s <command> [flags]\n\n", BinaryName, BinaryName)
 		fmt.Fprintf(output, "Behavior:\n")
 		fmt.Fprintf(output, "  - Without -u/--uid or --id, lists recent messages from the target account\n")
 		fmt.Fprintf(output, "  - With -u/--uid (IMAP) or --id (MailClaw), shows one full message and body\n")
@@ -80,9 +80,12 @@ func NewFlagSet() (*flag.FlagSet, *Options) {
 		fmt.Fprintf(output, "  %s -A personal --offset 10 --limit 10\n", BinaryName)
 		fmt.Fprintf(output, "  %s -A personal --debug\n", BinaryName)
 		fmt.Fprintf(output, "  %s -A work --format json\n\n", BinaryName)
-		fmt.Fprintf(output, "MailClaw (host/api_token in the same TOML account config):\n")
-		fmt.Fprintf(output, "  %s mailclaw list --format json\n", BinaryName)
-		fmt.Fprintf(output, "  %s mailclaw --help\n\n", BinaryName)
+		fmt.Fprintf(output, "Commands:\n")
+		fmt.Fprintf(output, "  list, get, export, send, delete, attachments, download, health\n")
+		fmt.Fprintf(output, "  Backend support is determined by -A/--account or default_account.\n\n")
+		fmt.Fprintf(output, "MailClaw examples (host/api_token in the same TOML account config):\n")
+		fmt.Fprintf(output, "  %s list -A cloud --format json\n", BinaryName)
+		fmt.Fprintf(output, "  %s send -A cloud --to user@example.com --subject Hello --text Hi\n\n", BinaryName)
 		fmt.Fprintf(output, "Config:\n")
 		fmt.Fprintf(output, "  default path: %s\n\n", DefaultConfigPath())
 		fmt.Fprintf(output, "Flags:\n")
@@ -105,7 +108,7 @@ func parseFlags(args []string, diagnostics io.Writer) (Options, error) {
 	}
 
 	if flagSet.NArg() != 0 {
-		return Options{}, errors.New("unexpected positional arguments; use email-cli mailclaw --help for MailClaw commands")
+		return Options{}, errors.New("unexpected positional arguments; use email-cli --help for commands")
 	}
 	if uint64(options.UID) > uint64(^uint32(0)) {
 		return Options{}, errors.New("IMAP UID must be between 1 and 4294967295")
@@ -157,26 +160,57 @@ func Execute(ctx context.Context, appRunner Runner, args []string, stdout io.Wri
 		return err
 	}
 
+	if err := renderResult(stdout, result, cliOptions.Debug); err != nil {
+		fmt.Fprintln(stderr, err)
+		return err
+	}
+	return nil
+}
+
+func renderResult(stdout io.Writer, result app.Result, debug bool) error {
 	var rendered []byte
+	var err error
 	if result.APIData != nil {
 		rendered, err = output.RenderAPI(result.APIData, result.Format)
 	} else if result.Mode == app.ModeDetail {
-		rendered, err = output.RenderDetail(result.Detail, result.Format, cliOptions.Debug)
+		rendered, err = output.RenderDetail(result.Detail, result.Format, debug)
 	} else {
 		rendered, err = output.RenderSummaries(result.Summaries, result.Format, result.ListMetadata)
 	}
 	if err != nil {
-		fmt.Fprintln(stderr, err)
 		return err
 	}
-
 	_, err = stdout.Write(rendered)
 	return err
 }
 
+func isCommand(command string) bool {
+	switch command {
+	case "list", "get", "export", "send", "delete", "attachments", "download", "health":
+		return true
+	default:
+		return false
+	}
+}
+
+func runCommand(ctx context.Context, args []string, stdout, stderr io.Writer, factory RunnerFactory) int {
+	if err := executeMailClaw(ctx, args, stdout, stderr, factory); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	return 0
+}
+
 func Run(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer, factory RunnerFactory) int {
+	if len(args) > 0 && isCommand(args[0]) {
+		return runCommand(ctx, args, stdout, stderr, factory)
+	}
 	if len(args) > 0 && args[0] == "mailclaw" {
-		return runMailClaw(ctx, args[1:], stdout, stderr)
+		fmt.Fprintln(stderr, "the mailclaw prefix was removed; use email-cli <command> -A <account>")
+		return 2
 	}
 	if _, err := parseFlags(args, stderr); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -201,8 +235,12 @@ func Run(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer,
 }
 
 func Main(args []string, stdout io.Writer, stderr io.Writer) int {
+	if len(args) > 0 && isCommand(args[0]) {
+		return runCommand(context.Background(), args, stdout, stderr, nil)
+	}
 	if len(args) > 0 && args[0] == "mailclaw" {
-		return runMailClaw(context.Background(), args[1:], stdout, stderr)
+		fmt.Fprintln(stderr, "the mailclaw prefix was removed; use email-cli <command> -A <account>")
+		return 2
 	}
 	cliOptions, err := parseFlags(args, stderr)
 	if err != nil {

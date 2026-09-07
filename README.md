@@ -56,11 +56,11 @@ environment variables. Protect the TOML file with `chmod 600 ~/.config/email-cli
 The following examples use a MailClaw default account; otherwise add `-A cloud` after the command.
 
 ```bash
-email-cli mailclaw list --format json
-email-cli mailclaw get 'email-string-id'
-email-cli mailclaw list --q 'invoice' --from 'billing@example.com' --limit 20
-email-cli mailclaw health
-email-cli mailclaw --help
+email-cli list -A cloud --format json
+email-cli get -A cloud 'email-string-id'
+email-cli list -A cloud --q 'invoice' --from 'billing@example.com' --limit 20
+email-cli health -A cloud
+email-cli --help
 ```
 
 Common flags go **after the command**, before or after IDs:
@@ -73,11 +73,11 @@ Common flags go **after the command**, before or after IDs:
 ### Search and export
 
 ```bash
-email-cli mailclaw list --from sender@example.com --to inbox@example.com \
+email-cli list -A cloud --from sender@example.com --to inbox@example.com \
   --q 'invoice' --after 2026-01-01 --before 2026-02-01 --limit 20 --offset 0
 
-email-cli mailclaw export --limit 100 --offset 0 --format json --output page-1.json
-email-cli mailclaw export --limit 100 --offset 100 --format json --output page-2.json
+email-cli export -A cloud --limit 100 --offset 0 --format json --output page-1.json
+email-cli export -A cloud --limit 100 --offset 100 --format json --output page-2.json
 ```
 
 `list` returns metadata; `export` returns full content. Both return **one page**, not all mail.
@@ -90,12 +90,12 @@ Output files are private (`0600`) and existing files are never overwritten.
 ### Send and delete
 
 ```bash
-email-cli mailclaw send --from sender@example.com \
+email-cli send -A cloud --from sender@example.com \
   --to first@example.com --to second@example.com \
   --subject 'Hello' --text-file ./message.txt
 
 # Permanent deletion, including the email's attachments:
-email-cli mailclaw delete 'email-string-id' --yes
+email-cli delete -A cloud 'email-string-id' --yes
 ```
 
 Send supports `--text`, `--html`, `--text-file`, `--html-file`, repeated `--to`, `--cc`, `--bcc`,
@@ -107,8 +107,8 @@ If sending times out, its remote outcome may be unknown: check before retrying t
 ### Attachments
 
 ```bash
-email-cli mailclaw attachments 'email-string-id' --format json
-email-cli mailclaw download 'email-string-id' 'attachment-string-id' --output ./invoice.pdf
+email-cli attachments -A cloud 'email-string-id' --format json
+email-cli download -A cloud 'email-string-id' 'attachment-string-id' --output ./invoice.pdf
 ```
 
 A destination is required. Remote filenames are never used as paths. Downloads stream to a private temporary
@@ -167,8 +167,8 @@ Use the same account selection for MailClaw:
 ```bash
 email-cli -A cloud --limit 20
 email-cli -A cloud --id 'email-string-id'
-email-cli mailclaw list -A cloud --q 'invoice'
-email-cli mailclaw attachments -A cloud 'email-string-id'
+email-cli list -A cloud --q 'invoice'
+email-cli attachments -A cloud 'email-string-id'
 ```
 
 Setting `default_account = "cloud"` also makes bare `email-cli` list MailClaw mail.
